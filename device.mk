@@ -267,13 +267,15 @@ PRODUCT_PACKAGES += \
     libc2dcolorconvert \
     libcodec2_hidl@1.0.vendor \
     libcodec2_vndk.vendor \
-    libmm-omxcore \
-    libOmxAacEnc \
-    libOmxAmrEnc \
+    # libmm-omxcore
+    # X2-Fix: 6 OMX audio-encoder refs removed (dead in vanilla 23.2: absent from caf media+audio @lineage-23.2-caf-sm8150,
+# no blob in F.26 (only *Dec decoders ship), official sm8150-common 23.2 does not list them).
+# libOmxAacEnc
+    # libOmxAmrEnc
     libOmxCore \
-    libOmxEvrcEnc \
-    libOmxG711Enc \
-    libOmxQcelp13Enc \
+    # libOmxEvrcEnc
+    # libOmxG711Enc
+    # libOmxQcelp13Enc
     libOmxVdec \
     libOmxVenc \
     libstagefrighthw \

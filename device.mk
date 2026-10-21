@@ -64,7 +64,7 @@ PRODUCT_COPY_FILES += \
 
 # ANT+
 PRODUCT_PACKAGES += \
-    AntHalService-Soong \
+    # AntHalService-Soong removed (X2-Fix: dead ref — no source in vanilla base/lunch deps, no blob in F.26; official sm8150 23.2 does not use it)
     com.dsi.ant@1.0.vendor
 
 # Audio

@@ -1,0 +1,7 @@
+[
+  {
+    "repository": "LineageOS/android_vendor_codeaurora_telephony",
+    "target_path": "vendor/codeaurora/telephony",
+    "branch": "lineage-23.2"
+  }
+]

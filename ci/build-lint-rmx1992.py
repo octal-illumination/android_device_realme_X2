@@ -172,13 +172,13 @@ def c12():
 def c13():
     try:
         tree_hal = set()
-        for _, elem in ET.parse(f'{DT}/manifest.xml').getroot().iter('hal'):
+        for elem in ET.parse(f'{DT}/manifest.xml').getroot().iter('hal'):
             n = elem.find('name')
             if n is not None and n.text:
                 tree_hal.add(n.text)
         blob_hal = set()
         for f in glob.glob(f'{VND}/proprietary/**/vintf/**/*.xml', recursive=True):
-            for _, elem in ET.parse(f).getroot().iter('hal'):
+            for elem in ET.parse(f).getroot().iter('hal'):
                 n = elem.find('name')
                 if n is not None and n.text:
                     blob_hal.add(n.text)

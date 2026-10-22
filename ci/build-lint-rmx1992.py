@@ -124,14 +124,69 @@ def c4():
     chk('C4 bash -n', not bad, '; '.join(bad[:5]))
 
 
-# --- C5: Android.bp brace balance ---
+# --- C5: Android.bp syntax — AOSP bpfmt full parser (falls back to brace balance) ---
+BPFMT = os.environ.get('X2_LINT_BPFMT') or f'{ROOT}/roms/common/tools/bin/bpfmt'
+
+
 def c5():
     bad = []
+    use_bpfmt = os.access(BPFMT, os.X_OK)
     for bp in [f'{VND}/Android.bp'] + sorted(glob.glob(f'{DT}/**/*.bp', recursive=True)):
-        s = open(bp, encoding='utf-8', errors='replace').read()
-        if s.count('{') != s.count('}'):
-            bad.append(os.path.relpath(bp, ROOT))
-    chk('C5 bp brace balance', not bad, ', '.join(bad[:5]))
+        rel = os.path.relpath(bp, ROOT)
+        if use_bpfmt:
+            r = subprocess.run([BPFMT, '-d', bp], capture_output=True, text=True)
+            if r.returncode:
+                bad.append(f'{rel}: {(r.stderr or r.stdout).strip()[:60] or "bpfmt parse error"}')
+        else:
+            s = open(bp, encoding='utf-8', errors='replace').read()
+            if s.count('{') != s.count('}'):
+                bad.append(rel)
+    chk(f'C5 Android.bp syntax ({"bpfmt full parse" if use_bpfmt else "brace fallback"})', not bad, '; '.join(bad[:4]))
+
+
+# --- C12: BoardConfig required vars + value domains (from base build/make/core/board_config.mk @lineage-23.2) ---
+def c12():
+    src = open(f'{DT}/BoardConfig.mk').read()
+
+    def val(name):
+        m = re.search(rf'^\s*{name}\s*:=\s*(\S*)\s*$', src, re.M)
+        return m.group(1) if m else None
+
+    problems = []
+    for req in ('TARGET_ARCH', 'TARGET_CPU_ABI'):
+        if not val(req):
+            problems.append(f'{req} not set (base board_config.mk error-rule)')
+    if val('TARGET_ARCH_SUITE') is not None and val('TARGET_ARCH') is not None:
+        problems.append('sets both TARGET_ARCH and TARGET_ARCH_SUITE (base forbids)')
+    for m in re.finditer(r'^\s*(MALLOC_[A-Z0-9_]*)\s*:=\s*(\S*)\s*$', src, re.M):
+        if m.group(2) not in ('true', 'false', ''):
+            problems.append(f'{m.group(1)} must be true/false/empty, got {m.group(2)}')
+    if val('TARGET_2ND_ARCH') and not val('TARGET_2ND_CPU_ABI'):
+        problems.append('TARGET_2ND_ARCH set without TARGET_2ND_CPU_ABI')
+    if not val('BOARD_BOOTIMAGE_PARTITION_SIZE'):
+        problems.append('BOARD_BOOTIMAGE_PARTITION_SIZE not set (non-A/B dedicated boot device)')
+    chk('C12 BoardConfig required vars (base rules)', not problems, '; '.join(problems[:4]))
+
+
+# --- C13 (WARN): tree-manifest HALs without a blob VINTF fragment (info review) ---
+def c13():
+    try:
+        tree_hal = set()
+        for _, elem in ET.parse(f'{DT}/manifest.xml').getroot().iter('hal'):
+            n = elem.find('name')
+            if n is not None and n.text:
+                tree_hal.add(n.text)
+        blob_hal = set()
+        for f in glob.glob(f'{VND}/proprietary/**/vintf/**/*.xml', recursive=True):
+            for _, elem in ET.parse(f).getroot().iter('hal'):
+                n = elem.find('name')
+                if n is not None and n.text:
+                    blob_hal.add(n.text)
+        missing = sorted(tree_hal - blob_hal)
+        warn('C13 tree-manifest HALs w/o blob VINTF fragment (may be source-built)',
+             ', '.join(missing[:8]) if missing else 'none — full overlap with blob fragments')
+    except Exception as e:  # noqa: BLE001
+        warn('C13 VINTF cross-check', f'skip: {e}')
 
 
 # --- C6: list ↔ harvest ↔ generated-makefile coverage ---
@@ -213,7 +268,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c10, c2, c3, c4, c5, c6, c7, c8, c9):
+    for fn in (c0, c1, c12, c2, c3, c4, c5, c6, c7, c8, c9, c10, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

@@ -63,8 +63,10 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/com.android.nfc_extras.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.nfc_extras.xml
 
 # ANT+
+# X2-Fix (2026-10-21): dead PRODUCT_PACKAGES refs removed in prior commits: AntHalService-Soong,
+# libOmxAacEnc, libOmxAmrEnc, libOmxEvrcEnc, libOmxQcelp13Enc, libOmxG711Enc, libmm-omxcore
+# (no source in vanilla 23.2 sync set; F.26 ships only *Dec decoder blobs; official sm8150 omits them).
 PRODUCT_PACKAGES += \
-    # AntHalService-Soong removed (X2-Fix: dead ref — no source in vanilla base/lunch deps, no blob in F.26; official sm8150 23.2 does not use it)
     com.dsi.ant@1.0.vendor
 
 # Audio
@@ -267,15 +269,7 @@ PRODUCT_PACKAGES += \
     libc2dcolorconvert \
     libcodec2_hidl@1.0.vendor \
     libcodec2_vndk.vendor \
-    # libmm-omxcore
-    # X2-Fix: 6 OMX audio-encoder refs removed (dead in vanilla 23.2: absent from caf media+audio @lineage-23.2-caf-sm8150,
-# no blob in F.26 (only *Dec decoders ship), official sm8150-common 23.2 does not list them).
-# libOmxAacEnc
-    # libOmxAmrEnc
     libOmxCore \
-    # libOmxEvrcEnc
-    # libOmxG711Enc
-    # libOmxQcelp13Enc
     libOmxVdec \
     libOmxVenc \
     libstagefrighthw \

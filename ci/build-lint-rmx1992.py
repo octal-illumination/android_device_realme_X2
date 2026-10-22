@@ -71,6 +71,21 @@ def c1():
     chk('C1 primary TARGET_ARCH_VARIANT set', board_var('TARGET_ARCH_VARIANT') is not None)
 
 
+# --- C10: make continuation integrity (born from job 306821: comment lines inside backslash blocks) ---
+def c10():
+    bad = []
+    for mk in (f'{DT}/device.mk', f'{DT}/lineage_X2.mk'):
+        lines = open(mk, encoding='utf-8', errors='replace').read().split('\n')
+        for i, ln in enumerate(lines):
+            if ln.rstrip().endswith('\\'):
+                nxt = lines[i + 1] if i + 1 < len(lines) else ''
+                if nxt.lstrip().startswith('#'):
+                    bad.append(f'{os.path.relpath(mk, ROOT)}:{i + 2} comment inside continuation block')
+                elif not nxt.strip():
+                    bad.append(f'{os.path.relpath(mk, ROOT)}:{i + 2} blank line after continuation')
+    chk('C10 make continuation integrity', not bad, '; '.join(bad[:5]))
+
+
 # --- C2: duplicate soong module names within each of our Android.bp files ---
 def bp_names(path):
     return re.findall(r'^\s*name:\s*"([^"]+)"', open(path, encoding='utf-8', errors='replace').read(), re.M)
@@ -198,7 +213,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9):
+    for fn in (c0, c1, c10, c2, c3, c4, c5, c6, c7, c8, c9):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

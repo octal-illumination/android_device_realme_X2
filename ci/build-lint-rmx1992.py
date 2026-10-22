@@ -80,9 +80,9 @@ def c10():
             if ln.rstrip().endswith('\\'):
                 nxt = lines[i + 1] if i + 1 < len(lines) else ''
                 if nxt.lstrip().startswith('#'):
+                    # Only comments are proven-fatal (job 306821); blank continuation
+                    # lines are legal GNU make (build-proven by job 306665's full parse).
                     bad.append(f'{os.path.relpath(mk, ROOT)}:{i + 2} comment inside continuation block')
-                elif not nxt.strip():
-                    bad.append(f'{os.path.relpath(mk, ROOT)}:{i + 2} blank line after continuation')
     chk('C10 make continuation integrity', not bad, '; '.join(bad[:5]))
 
 

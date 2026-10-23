@@ -12,6 +12,7 @@ never fail the run but must be reviewed.
 Usage: python3 build-lint-rmx1992.py
 """
 import glob
+import json
 import os
 import re
 import subprocess
@@ -168,6 +169,117 @@ def c12():
     chk('C12 BoardConfig required vars (base rules)', not problems, '; '.join(problems[:4]))
 
 
+# --- C14: base-interface partition collision (from job 306964: camera.postproc) ---
+def c14():
+    ref_path = f'{ROOT}/roms/common/tools/ref/base_interface_modules.txt'
+    if not os.path.isfile(ref_path):
+        warn('C14 base-interface collision', 'cache missing — see tools/ref/')
+        return
+    base_modules = set(open(ref_path).read().split('\n'))
+    our_bp = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
+    our_names = set(re.findall(r'^\s*name:\s*"([^"]+)"', our_bp, re.M))
+    collisions = sorted(our_names & base_modules)
+    chk('C14 base-interface partition collision', not collisions,
+        f'{len(collisions)} collision(s): ' + ', '.join(collisions[:4]))
+
+
+# --- C17: proprietary-files.txt entry syntax ---
+def c17():
+    bad = []
+    for i, line in enumerate(open(f'{DT}/proprietary-files.txt'), 1):
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        core = s[1:] if s.startswith('-') else s
+        entry_part = core.split('|')[0].split(';')[0]
+        if ':' in entry_part:
+            src_part, dst_part = entry_part.split(':', 1)
+            if not src_part.strip() or not dst_part.strip():
+                bad.append(f'line {i}: empty src/dst')
+        path = entry_part.split(':')[0].strip()
+        if not path or '/' not in path:
+            bad.append(f'line {i}: no partition prefix')
+        if path.startswith('/'):
+            bad.append(f'line {i}: absolute path')
+    chk('C17 list syntax', not bad, '; '.join(bad[:4]))
+
+
+# --- C18: kernel prerequisites ---
+def c18():
+    problems = []
+    bc = open(f'{DT}/BoardConfig.mk').read()
+    m = re.search(r'TARGET_KERNEL_SOURCE\s*:=\s*(\S+)', bc)
+    if not m:
+        problems.append('TARGET_KERNEL_SOURCE not set')
+    m2 = re.search(r'TARGET_KERNEL_CONFIG\s*:=\s*(\S+)', bc)
+    if m2:
+        kernel_cfg_dir = f'{ROOT}/roms/common/kernel/sm6150/arch/arm64/configs'
+        if not os.path.isfile(os.path.join(kernel_cfg_dir, m2.group(1))):
+            problems.append(f'TARGET_KERNEL_CONFIG {m2.group(1)} not found')
+    else:
+        problems.append('TARGET_KERNEL_CONFIG not set')
+    chk('C18 kernel prerequisites', not problems, '; '.join(problems[:3]))
+
+
+# --- C19: critical files ---
+def c19():
+    missing = []
+    for pattern, name in [
+        (f'{DT}/rootdir/etc/fstab*', 'fstab'),
+        (f'{DT}/rootdir/etc/init*.rc', 'init.rc'),
+        (f'{DT}/rootdir/ueventd*', 'ueventd.rc'),
+        (f'{DT}/AndroidProducts.mk', 'AndroidProducts.mk'),
+        (f'{DT}/lineage_*.mk', 'lineage_X2.mk'),
+    ]:
+        if not glob.glob(pattern):
+            missing.append(name)
+    chk('C19 critical files', not missing, f'missing: {", ".join(missing)}' if missing else 'all present')
+
+
+# --- C20: GitHub blob size limit ---
+def c20():
+    big = []
+    for f in glob.glob(f'{VND}/proprietary/**/*', recursive=True):
+        if os.path.isfile(f) and not os.path.islink(f) and os.path.getsize(f) > 50 * 1024 * 1024:
+            big.append(f'{os.path.relpath(f, VND)}: {os.path.getsize(f)//(1024*1024)}MB')
+    chk('C20 blob size <50MB', not big, '; '.join(big[:3]))
+
+
+# --- C21: branch tip sync ---
+def c21():
+    drift = []
+    for path, label in [(DT, 'device'), (VND, 'vendor')]:
+        local = subprocess.run(['git', '-C', path, 'rev-parse', 'HEAD'],
+                               capture_output=True, text=True).stdout.strip()
+        branch = subprocess.run(['git', '-C', path, 'branch', '--show-current'],
+                                capture_output=True, text=True).stdout.strip()
+        if branch:
+            remote = subprocess.run(['git', '-C', path, 'rev-parse', f'origin/{branch}'],
+                                    capture_output=True, text=True).stdout.strip()
+            if local != remote:
+                drift.append(f'{label}: local {local[:8]} != remote {remote[:8]}')
+    chk('C21 branch tip sync', not drift, '; '.join(drift))
+
+
+# --- C22: lineage.dependencies branch matches build line ---
+def c22():
+    dep_path = f'{DT}/lineage.dependencies'
+    if not os.path.isfile(dep_path):
+        return
+    try:
+        deps = json.load(open(dep_path))
+        problems = []
+        branch = subprocess.run(['git', '-C', DT, 'branch', '--show-current'],
+                                capture_output=True, text=True).stdout.strip()
+        for dep in deps:
+            dep_branch = dep.get('branch', '')
+            if dep_branch and branch and dep_branch != branch:
+                problems.append(f'{dep.get("repository", "?")}: branch {dep_branch} != line {branch}')
+        chk('C22 lineage.dependencies branch match', not problems, '; '.join(problems[:3]))
+    except (json.JSONDecodeError, KeyError) as e:
+        chk('C22 lineage.dependencies valid', False, f'parse error: {e}')
+
+
 # --- C13 (WARN): tree-manifest HALs without a blob VINTF fragment (info review) ---
 def c13():
     try:
@@ -268,7 +380,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c2, c3, c4, c5, c6, c7, c8, c9, c10, c13):
+    for fn in (c0, c1, c12, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

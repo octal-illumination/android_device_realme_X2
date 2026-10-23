@@ -376,6 +376,9 @@ odm/lib64/libc++_shared.so
 odm/lib64/libcdm_metrics_protos.so
 odm/lib64/libcdm_protos.so
 odm/lib64/libdav1d.so.4
+odm/lib64/libavutil.so
+odm/lib64/libavcodec.so;DISABLE_DEPS
+odm/lib64/libavformat.so
 odm/lib64/libffmpeg_utils.so
 odm/lib64/libhta.so
 odm/lib64/libhwconfigurationutil.so

@@ -225,7 +225,7 @@ vendor/lib64/libsoc_helper.so
 vendor/lib64/libsoc_helper_jni.so
 vendor/lib64/libsubsystem_control.so
 vendor/lib64/libtzdrmgenprov.so
-vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so
+vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so;MODULE_SUFFIX=_vendor
 
 # Camera-arcsoft
 odm/lib64/libarcsoft_beautyshot.so

@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 ROOT = os.environ.get('X2_LINT_ROOT') or os.path.expanduser('~/Projects/android/devices/rmx1992')
 DT = os.environ.get('X2_LINT_DT') or f'{ROOT}/roms/common/device/X2'
 VND = os.environ.get('X2_LINT_VND') or f'{ROOT}/roms/common/vendor/realme'
+DUMP = '/tmp/rmx_pp/vendor-trust/f26_dump'
 fails, warns = [], []
 
 
@@ -224,7 +225,15 @@ def c23():
     caf_path = f'{ROOT}/roms/common/tools/ref/caf_repo_modules.txt'
     if os.path.isfile(caf_path):
         caf_cache = set(x for x in open(caf_path).read().split('\n') if x)
-    combined_cache = iface_cache | caf_cache
+    syslib_cache = set()
+    syslib_path = f'{ROOT}/roms/common/tools/ref/base_system_libraries.txt'
+    if os.path.isfile(syslib_path):
+        for _line in open(syslib_path):
+            _line = _line.strip()
+            if not _line or _line.startswith('#'):
+                continue
+            syslib_cache.update(_line.split())
+    combined_cache = iface_cache | caf_cache | syslib_cache
 
     bp = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
     our_modules = set(re.findall(r'^\s*name:\s*"([^"]+)"', bp, re.M))
@@ -268,6 +277,156 @@ def c23():
         not dump_available, '; '.join(dump_available[:5]))
     warn('C23 DT_NEEDED unresolved (not in dump or base — verify)',
          f'{len(unresolved)} names: ' + ', '.join(unresolved[:12]) if unresolved else 'none')
+
+
+# --- C24: RC service binary existence (WARN — audit level) ---
+# Born from the full-tree audit: .rc files reference service binaries that
+# may not exist in our blobs. Most are base-provided; this catches genuine gaps.
+def c24():
+    if not os.path.isdir(DUMP):
+        warn('C24 RC service binaries', 'dump not mounted — skipping audit')
+        return
+    base_binaries = set()
+    bb_path = f'{ROOT}/roms/common/tools/ref/base_binaries.txt'
+    if os.path.isfile(bb_path):
+        base_binaries = set(x for x in open(bb_path).read().split('\n') if x and not x.startswith('#'))
+    caf_cache = set()
+    caf_path = f'{ROOT}/roms/common/tools/ref/caf_repo_modules.txt'
+    if os.path.isfile(caf_path):
+        caf_cache = set(x for x in open(caf_path).read().split('\n') if x)
+    rc_files = glob.glob(f'{DT}/rootdir/etc/*.rc') + glob.glob(f'{DT}/**/init/*.rc', recursive=True) + glob.glob(f'{VND}/proprietary/**/init/*.rc', recursive=True)
+    missing = []
+    for rc_file in rc_files:
+        for line in open(rc_file, errors='replace'):
+            m = re.match(r'\s*service\s+\S+\s+/(\S+)', line)
+            if not m:
+                continue
+            binary = m.group(1)
+            base_name = binary.split('/')[-1]
+            if binary in base_binaries or base_name in base_binaries:
+                continue
+            if base_name in caf_cache:
+                continue
+            found = False
+            for part in ['vendor/bin/hw', 'vendor/bin', 'odm/bin/hw', 'odm/bin']:
+                if os.path.isfile(f'{VND}/proprietary/{part}/{binary}') or os.path.isfile(f'{DUMP}/{part}/{binary}'):
+                    found = True
+                    break
+            if not found and glob.glob(f'{DT}/**/{base_name}', recursive=True):
+                found = True
+            if not found:
+                missing.append(binary)
+    warn('C24 RC service binaries (audit)', f'{len(missing)} binaries referenced in .rc not found in blobs/tree: ' + ', '.join(missing[:5]) if missing else 'all service binaries resolve')
+
+
+# --- C25: DT_NEEDED closure spot-check (WARN — audit level) ---
+# Reads DT_NEEDED from listed blobs and validates against the 3-cache chain.
+# Complements C23 (which checks Android.bp shared_libs) by catching entries
+# extract-utils may have missed (e.g. DISABLE_DEPS blobs).
+def c25():
+    if not os.path.isdir(DUMP):
+        warn('C25 DT_NEEDED closure', 'dump not mounted — skipping audit')
+        return
+    iface_cache = set()
+    iface_path = f'{ROOT}/roms/common/tools/ref/base_interface_modules.txt'
+    if os.path.isfile(iface_path):
+        iface_cache = set(x for x in open(iface_path).read().split('\n') if x)
+    caf_cache = set()
+    caf_path = f'{ROOT}/roms/common/tools/ref/caf_repo_modules.txt'
+    if os.path.isfile(caf_path):
+        caf_cache = set(x for x in open(caf_path).read().split('\n') if x)
+    syslib_cache = set()
+    syslib_path = f'{ROOT}/roms/common/tools/ref/base_system_libraries.txt'
+    if os.path.isfile(syslib_path):
+        for _line in open(syslib_path):
+            _line = _line.strip()
+            if not _line or _line.startswith('#'):
+                continue
+            syslib_cache.update(_line.split())
+    combined = iface_cache | caf_cache | syslib_cache
+    bp = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
+    our_modules = set(re.findall(r'^\s*name:\s*"([^"]+)"', bp, re.M))
+    listed = set()
+    for line in open(f'{DT}/proprietary-files.txt'):
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        core = s[1:] if s.startswith('-') else s
+        entry = core.split('|')[0].split(';')[0].split(':')[0].strip()
+        if entry:
+            listed.add(entry.split('/')[-1].replace('.so',''))
+    unresolved = set()
+    checked = 0
+    for entry_raw in open(f'{DT}/proprietary-files.txt'):
+        s = entry_raw.strip()
+        if not s or s.startswith('#') or not s.endswith('.so'):
+            continue
+        core = s[1:] if s.startswith('-') else s
+        entry = core.split('|')[0].split(';')[0].split(':')[0].strip()
+        path = f'{VND}/proprietary/{entry}'
+        if not os.path.isfile(path):
+            continue
+        checked += 1
+        try:
+            r = subprocess.run(['readelf', '-d', path], capture_output=True, text=True, timeout=5)
+            for line in r.stdout.split('\n'):
+                if 'NEEDED' not in line or '[' not in line or ']' not in line:
+                    continue
+                lib = line.split('[')[1].rstrip(']').replace('.so','')
+                clean = lib
+                for suffix in ('.vendor','.system'):
+                    if clean.endswith(suffix):
+                        clean = clean[:-len(suffix)]
+                if clean in combined or lib in combined or clean in our_modules or clean in listed:
+                    continue
+                # versioned interfaces handled by the interface cache (full names)
+                unresolved.add(lib)
+        except Exception:
+            pass
+    warn('C25 DT_NEEDED closure (audit)', f'{len(unresolved)} unresolved names from {checked} blobs: ' + ', '.join(sorted(unresolved)[:8]) if unresolved else f'all {checked} blob DT_NEEDED entries resolve')
+
+
+# --- C26: fstab partition audit (WARN — with standard whitelist) ---
+def c26():
+    STANDARD = {'boot','recovery','data','cache','system','vendor','product','odm','system_ext',
+                'metadata','misc','persist','firmware','dsp','modem','bluetooth','usbotg',
+                'opporeserve','opporeserve2','acct','config','dev','proc','sys','sdcard',
+                'storage','mnt','d','sbin','bt_firmware','userdata','zram0','firmware_mnt',
+                'or','sdcard1'}
+    fstab_files = glob.glob(f'{DT}/rootdir/etc/fstab*')
+    if not fstab_files:
+        return
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    bc_partitions = set(re.findall(r'BOARD_(\w+)IMAGE_PARTITION_SIZE', bc, re.I))
+    for fstab_file in fstab_files:
+        fstab = open(fstab_file, encoding='utf-8', errors='replace').read()
+        fstab_parts = set(re.findall(r'/(\w+)\s', fstab))
+        odd = [p for p in fstab_parts if p not in STANDARD and p.upper() not in bc_partitions]
+        if odd:
+            warn('C26 fstab partition audit', f'{fstab_file}: non-standard partitions without BOARD_ size: {odd}')
+
+
+# --- C27: VINTF HAL service existence (WARN — audit level) ---
+def c27():
+    manifest = open(f'{DT}/manifest.xml', encoding='utf-8', errors='replace').read()
+    hal_names = re.findall(r'<name>([^<]+)</name>', manifest)
+    rc_files = glob.glob(f'{DT}/rootdir/etc/*.rc') + glob.glob(f'{DT}/**/init/*.rc', recursive=True)
+    vintf_fragments = glob.glob(f'{VND}/proprietary/**/vintf/**/*.xml', recursive=True)
+    no_service = []
+    for hal in hal_names:
+        found = False
+        for rc_file in rc_files:
+            if hal in open(rc_file, errors='replace').read():
+                found = True
+                break
+        if not found:
+            for vf in vintf_fragments:
+                if hal in open(vf, errors='replace').read():
+                    found = True
+                    break
+        if not found:
+            no_service.append(hal)
+    warn('C27 VINTF service existence (audit)', f'{len(no_service)}/{len(hal_names)} HALs without .rc service declaration: ' + ', '.join(no_service[:5]) if no_service else 'all HALs have service declarations')
 
 
 # --- C17: proprietary-files.txt entry syntax ---
@@ -467,7 +626,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

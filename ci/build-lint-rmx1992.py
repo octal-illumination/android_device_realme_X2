@@ -183,6 +183,93 @@ def c14():
         f'{len(collisions)} collision(s): ' + ', '.join(collisions[:4]))
 
 
+# --- C23: DT_NEEDED dependency resolution (born from job 307111: libavutil missing) ---
+# Every shared_libs entry in our Android.bp must resolve to either:
+# (a) one of our own prebuilt modules, (b) a known base system library,
+# or (c) a blob that EXISTS in the F.26 dump but was never listed — the actionable case.
+BASE_LIBS = {
+    'libc', 'libm', 'libdl', 'liblog', 'libutils', 'libcutils', 'libbase',
+    'lib c++', 'libc++', 'libstdc++', 'libz', 'libcrypto', 'libssl',
+    'libhidlbase', 'libhidltransport', 'libhwbinder', 'libvndksupport',
+    'libbinder', 'libbinder_ndk', 'libgui', 'libui', 'libsurfaceflinger',
+    'libcamera_metadata', 'libcamera2ndk', 'libjpeg', 'libpng', 'libexif',
+    'libprotobuf-cpp-lite', 'libprotobuf-cpp-full', 'libprotobuf-cpp-lite-3.9.1',
+    'libsqlite', 'libxml2', 'libexpat', 'libicu', 'libssl', 'libcurl',
+    'libhardware', 'libhardware_legacy', 'libsync', 'libpagemap',
+    'libprocessgroup', 'libselinux', 'libminijail', 'libavservices_minijail',
+    'libstagefright_foundation', 'libstagefright', 'libmedia',
+    'libaaudio', 'libaudioclient', 'libaudiofoundation',
+    'libbinder_rtbs', 'libc++.so', 'libc.so',
+    'libchrome', 'libchrome.vendor', 'libcrypto-v33',
+    'libjson', 'libjsoncpp.vendor', 'libtinyxml', 'libtinyxml2',
+    'libnl', 'libwpa_client', 'libwifi-hal-ctrl', 'libwifi-hal-qcom',
+    'libvulkan', 'libEGL', 'libGLESv2', 'libGLESv1_CM',
+    'libnetutils', 'libnetd_client', 'libndk',
+    'libpower', 'libperfmgr', 'libtombstoned_client',
+    'libqservice', 'libqdutils', 'libqservice.vendor',
+    'libdisplayconfig.qti', 'libdisplayconfig.system.qti',
+    'libqti_vndfwk_detect', 'libqti_vndfwk_detect.vendor',
+    'libgrallocusage', 'libgralloctypes',
+    'libfmq', 'libhardware_legacy', 'libhealthshim',
+}
+
+
+def c23():
+    # Load BOTH reference caches: HIDL interfaces + caf repo source-built modules
+    iface_cache = set()
+    iface_path = f'{ROOT}/roms/common/tools/ref/base_interface_modules.txt'
+    if os.path.isfile(iface_path):
+        iface_cache = set(x for x in open(iface_path).read().split('\n') if x)
+    caf_cache = set()
+    caf_path = f'{ROOT}/roms/common/tools/ref/caf_repo_modules.txt'
+    if os.path.isfile(caf_path):
+        caf_cache = set(x for x in open(caf_path).read().split('\n') if x)
+    combined_cache = iface_cache | caf_cache
+
+    bp = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
+    our_modules = set(re.findall(r'^\s*name:\s*"([^"]+)"', bp, re.M))
+    # all shared_libs entries (inside cc_prebuilt blocks)
+    all_shared = set()
+    for m in re.finditer(r'shared_libs:\s*\[([^]]+)\]', bp, re.S):
+        for lib in re.findall(r'"([^"]+)"', m.group(1)):
+            all_shared.add(lib)
+
+    unresolved = []
+    dump_available = []
+    for lib in sorted(all_shared):
+        # strip common suffixes
+        stem = lib
+        for suffix in ('.vendor', '.system'):
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+        if stem in our_modules or lib in our_modules:
+            continue
+        if stem in BASE_LIBS or lib in BASE_LIBS:
+            continue
+        # Check against combined cache (HIDL interfaces + caf repo source-built modules)
+        if stem in combined_cache or lib in combined_cache:
+            continue
+        # Not in our modules, not in base, not in interface/caf caches — is it in the dump?
+        dump_path = f'/tmp/rmx_pp/vendor-trust/f26_dump/odm/lib64/{stem}.so'
+        if os.path.isfile(dump_path):
+            dump_available.append(f'{lib} → EXISTS IN DUMP but not listed (add to proprietary-files.txt!)')
+        else:
+            # check other partitions
+            found = False
+            for part_dir in ['vendor/lib64', 'system_ext/lib64', 'odm/lib', 'vendor/lib', 'system_ext/lib']:
+                if os.path.isfile(f'/tmp/rmx_pp/vendor-trust/f26_dump/{part_dir}/{stem}.so'):
+                    found = True
+                    dump_available.append(f'{lib} → EXISTS IN DUMP at {part_dir} but not listed')
+                    break
+            if not found:
+                unresolved.append(lib)
+
+    chk('C23 DT_NEEDED dependency resolution (dump-available)',
+        not dump_available, '; '.join(dump_available[:5]))
+    warn('C23 DT_NEEDED unresolved (not in dump or base — verify)',
+         f'{len(unresolved)} names: ' + ', '.join(unresolved[:12]) if unresolved else 'none')
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -380,7 +467,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

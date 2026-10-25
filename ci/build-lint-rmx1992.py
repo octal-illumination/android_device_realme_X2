@@ -785,6 +785,97 @@ def c40():
     chk('C40 VINTF manifest validation', not issues, '; '.join(issues[:5]))
 
 
+# --- C41: Golden-tree cross-validation (false-positive detector) ---
+# Principle: if a check FAILs against a KNOWN-GOOD tree (one that builds),
+# the check has a false positive. Jigen's tree (builds successfully on the
+# same base) is the golden reference.
+# Path overridable via env: X2_GOLDEN_TREE
+GOLDEN_TREE = os.environ.get('X2_GOLDEN_TREE') or '/run/media/user/My Passport/RMX1992EX/tmp/jigen_analysis/device'
+
+
+def c41():
+    if not os.path.isdir(GOLDEN_TREE):
+        warn('C41 golden-tree cross-validation', f'golden tree not found at {GOLDEN_TREE} (clone Jigen\'s device tree to enable)')
+        return
+
+    fp_issues = []
+
+    # === C28 (variable names) against golden tree ===
+    golden_mk = os.path.join(GOLDEN_TREE, 'device.mk')
+    if os.path.isfile(golden_mk):
+        for line in open(golden_mk, encoding='utf-8', errors='replace'):
+            m = re.match(r'^([A-Z_]+)\s*[:+]?=', line)
+            if m and m.group(1).startswith('PPRODUCT_'):
+                # this would be a real issue even on golden tree
+                pass  # don't count — PPRODUCT is a bug anywhere
+
+    # === C29 (security) against golden tree ===
+    golden_bc = os.path.join(GOLDEN_TREE, 'BoardConfig.mk')
+    if os.path.isfile(golden_bc):
+        gc = open(golden_bc, encoding='utf-8', errors='replace').read()
+        # if golden tree has selinux=permissive, our check would flag a KNOWN-GOOD tree
+        if 'androidboot.selinux=permissive' in gc:
+            fp_issues.append('C29 flags selinux=permissive but golden tree has it (may be intentional for dev builds)')
+
+    # === C33 (property syntax) against golden tree ===
+    for prop in ['vendor.prop', 'system.prop', 'odm.prop', 'product.prop']:
+        golden_prop = os.path.join(GOLDEN_TREE, prop)
+        if os.path.isfile(golden_prop):
+            for i, line in enumerate(open(golden_prop, errors='replace')):
+                s = line.strip()
+                if not s or s.startswith('#'):
+                    continue
+                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*=', s):
+                    # found a line our C33 would flag but golden tree builds with it
+                    fp_issues.append(f'C33 would flag {prop}:{i+1}: {s[:40]}... (golden tree builds with this)')
+
+    # === C36 (hardware constants) against golden tree ===
+    if os.path.isfile(golden_bc):
+        gc = open(golden_bc, encoding='utf-8', errors='replace').read()
+        for var, (expected, desc) in HW_TRUTH.items():
+            m = re.search(rf'^{var}\s*:=\s*(\d+)', gc, re.M)
+            if m:
+                actual = int(m.group(1))
+                if actual != expected:
+                    fp_issues.append(f'C36: golden tree has {var}={actual} but our HW_TRUTH says {expected} — one of us is wrong')
+
+    # === C37 (defconfig essentials) against golden tree ===
+    golden_defconfig = os.path.join(GOLDEN_TREE, '..', 'kernel', 'arch', 'arm64', 'configs', 'X2_defconfig')
+    if os.path.isfile(golden_defconfig):
+        gd = open(golden_defconfig, errors='replace').read()
+        for cfg in ['CONFIG_ARCH_SM6150=y', 'CONFIG_ARCH_QCOM=y']:
+            if cfg not in gd:
+                fp_issues.append(f'C37 expects {cfg} but golden tree defconfig lacks it')
+
+    # === C40 (VINTF) against golden manifest ===
+    golden_manifest = os.path.join(GOLDEN_TREE, 'manifest.xml')
+    if os.path.isfile(golden_manifest):
+        import xml.etree.ElementTree as ET
+        try:
+            gtree = ET.parse(golden_manifest)
+            groot = gtree.getroot()
+            for hal in groot.iter('hal'):
+                gname = hal.find('name')
+                gtransport = hal.find('transport')
+                gversion = hal.find('version')
+                gfqname = hal.find('fqname')
+                n = gname.text if gname is not None else '?'
+                if gtransport is None:
+                    fp_issues.append(f'C40: golden HAL {n} has no transport (our check would flag a known-good tree)')
+                elif gtransport.text not in ('hwbinder', 'passthrough'):
+                    fp_issues.append(f'C40: golden HAL {n} has transport {gtransport.text} (our check would flag)')
+                if gversion is None and gfqname is None:
+                    fp_issues.append(f'C40: golden HAL {n} has neither version nor fqname (check would flag)')
+        except Exception:
+            pass
+
+    # === Summary ===
+    if fp_issues:
+        warn('C41 golden-tree cross-validation', f'{len(fp_issues)} potential false positives detected: ' + '; '.join(fp_issues[:5]))
+    else:
+        warn('C41 golden-tree cross-validation', 'no false positives — all checks pass against known-good tree')
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -982,7 +1073,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

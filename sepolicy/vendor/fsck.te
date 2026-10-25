@@ -1,0 +1,4 @@
+allow fsck fsck:capability { kill };
+dontaudit fsck sysfs:file { getattr open read };
+allow fsck vendor_modem_efs_partition_device:blk_file { ioctl open read write };
+

@@ -1,0 +1,25 @@
+# Suppress noisy denials
+dontaudit fsck_untrusted sysfs:dir { search read open };
+dontaudit hal_audio_default default_prop:file { read open getattr map };
+dontaudit hal_audio_default system_prop:file { read open getattr map };
+dontaudit hal_camera_default vendor_default_prop:property_service set;
+dontaudit hal_fingerprint_default default_prop:file { read open getattr map };
+dontaudit hal_fingerprint_default default_prop:property_service set;
+dontaudit hal_fingerprint_default vendor_default_prop:property_service set;
+dontaudit hal_sensors_default system_prop:file { read open getattr map };
+dontaudit rild cache_file:dir { search read open };
+dontaudit rild cache_file:file { read open getattr map };
+dontaudit rild default_prop:file { read open getattr map };
+dontaudit rild default_prop:property_service set;
+dontaudit rild system_prop:property_service set;
+dontaudit vendor_init bootloader_prop:property_service set;
+dontaudit vendor_init default_prop:file { read open getattr map };
+dontaudit vendor_init default_prop:property_service set;
+dontaudit vendor_qti_init_shell default_prop:file { read open getattr map };
+dontaudit vendor_rmt_storage default_prop:file { read open getattr map };
+dontaudit vendor_rmt_storage system_prop:file { read open getattr map };
+dontaudit vendor_wcnss_service vendor_default_prop:property_service set;
+
+# Suppress system_app denials on vendor sysfs
+dontaudit system_app vendor_sysfs_battery_supply:file { read open getattr };
+dontaudit system_app vendor_sysfs_graphics:file { read open getattr };

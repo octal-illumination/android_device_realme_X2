@@ -429,6 +429,101 @@ def c27():
     warn('C27 VINTF service existence (audit)', f'{len(no_service)}/{len(hal_names)} HALs without .rc service declaration: ' + ', '.join(no_service[:5]) if no_service else 'all HALs have service declarations')
 
 
+# --- C28: Makefile variable name validation (born from PPRODUCT typo) ---
+# Catches typo'd variable names in device.mk and BoardConfig.mk (e.g., PPRODUCT_COPY_FILES)
+KNOWN_MAKE_VARS = {
+    'PRODUCT_COPY_FILES', 'PRODUCT_PACKAGES', 'PRODUCT_PROPERTY_OVERRIDES',
+    'PRODUCT_DEFAULT_PROPERTY_OVERRIDES', 'PRODUCT_BOOT_JARS', 'PRODUCT_AAPT_CONFIG',
+    'PRODUCT_AAPT_PREF_CONFIG', 'PRODUCT_CHARACTERISTICS', 'PRODUCT_DEXPREOPT_SPEED_APPS',
+    'PRODUCT_DEVICE', 'PRODUCT_NAME', 'PRODUCT_BRAND', 'PRODUCT_MODEL', 'PRODUCT_MANUFACTURER',
+    'PRODUCT_BUILD_PROP_OVERRIDES', 'PRODUCT_GMS_CLIENTID_BASE', 'PRODUCT_SOONG_NAMESPACES',
+    'PRODUCT_SYSTEM_SERVER_COMPILER_FILTER', 'PRODUCT_USE_PROFILE_FOR_BOOT_IMAGE',
+    'PRODUCT_DEX_PREOPT_BOOT_IMAGE_PROFILE_LOCATION', 'PRODUCT_SET_DEBUGFS_RESTRICTIONS',
+    'PRODUCT_PACKAGE_OVERLAYS', 'PRODUCT_USE_DYNAMIC_PARTITIONS',
+}
+
+
+def c28():
+    typos = []
+    for mk_file in [f'{DT}/device.mk', f'{DT}/BoardConfig.mk']:
+        for line in open(mk_file, encoding='utf-8', errors='replace'):
+            m = re.match(r'^([A-Z_]+)\s*[:+]?=', line)
+            if not m:
+                continue
+            var = m.group(1)
+            # check against common patterns: must end with a known base or be a known prefix
+            if var in KNOWN_MAKE_VARS:
+                continue
+            # allow BOARD_*, TARGET_*, SELINUX_*, etc. (BoardConfig domain)
+            if var.startswith(('BOARD_', 'TARGET_', 'BUILD_', 'SELINUX_', 'USE_', 'ENABLE_',
+                               'ANDROID_', 'AB_', 'VENDOR_', 'WIFI_', 'WPA_', 'QC_', 'LOC_',
+                               'AUDIO_', 'DEX_', 'PRODUCT_', 'SYSTEM_', 'SYSTEMUI_', 'WITH_',
+                               'PPRODUCT_')):
+                # PPRODUCT_ is a typo — explicitly flag it
+                if var.startswith('PPRODUCT_'):
+                    typos.append(f'{os.path.basename(mk_file)}:{var} (should be PRODUCT_...)')
+                continue
+            # unknown variable that looks like a make var but isn't recognized
+            if '_COPY_FILES' in var or '_PACKAGES' in var:
+                typos.append(f'{os.path.basename(mk_file)}:{var} (unrecognized variable name)')
+    chk('C28 makefile variable name validation', not typos, '; '.join(typos[:5]))
+
+
+# --- C29: Security policy check (born from selinux=permissive + IGNORE_NEVERALLOWS) ---
+def c29():
+    issues = []
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    if 'androidboot.selinux=permissive' in bc:
+        issues.append('androidboot.selinux=permissive in BOARD_KERNEL_CMDLINE (ROM boots non-enforcing)')
+    if re.search(r'^SELINUX_IGNORE_NEVERALLOWS\s*:=\s*true', bc, re.M):
+        issues.append('SELINUX_IGNORE_NEVERALLOWS := true (masks real policy violations)')
+    if 'androidboot.memcg=1' in bc:
+        # informational — memcg is fine but worth tracking
+        pass
+    chk('C29 security policy (no permissive, no ignore-neverallows)', not issues, '; '.join(issues))
+
+
+# --- C30: BUILD_BROKEN flag audit (technical debt tracker) ---
+def c30():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    flags = re.findall(r'^(BUILD_BROKEN_\w+)\s*:=\s*true', bc, re.M)
+    warn('C30 BUILD_BROKEN flags (technical debt)', f'{len(flags)} masking flags present: {", ".join(flags)}' if flags else 'none')
+
+
+# --- C31: Partition layout consistency (born from dynamic partitions gap) ---
+def c31():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    has_dynamic = 'BOARD_SUPER_PARTITION_BLOCK_DEVICES' in bc
+    has_static = bool(re.search(r'^BOARD_SYSTEMIMAGE_PARTITION_SIZE', bc, re.M))
+    fstab = open(f'{DT}/rootdir/etc/fstab.qcom', encoding='utf-8', errors='replace').read()
+    has_logical_fstab = 'logical' in fstab
+    issues = []
+    if has_dynamic and not has_logical_fstab:
+        issues.append('BoardConfig has dynamic partitions but fstab lacks logical entries')
+    if not has_dynamic and has_logical_fstab:
+        issues.append('fstab has logical entries but BoardConfig lacks dynamic partition config')
+    if not has_dynamic:
+        issues.append('no dynamic partition config (hardware may require super partition — verify)')
+    chk('C31 partition layout consistency', not issues, '; '.join(issues))
+
+
+# --- C32: CPU variant sanity vs sm6150 big.LITTLE topology ---
+def c32():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    issues = []
+    # sm6150: 2x Cortex-A76 (big) + 6x Cortex-A55 (little)
+    cpu_variant = re.search(r'^TARGET_CPU_VARIANT\s*:=\s*(\S+)', bc, re.M)
+    cpu2_variant = re.search(r'^TARGET_2ND_CPU_VARIANT\s*:=\s*(\S+)', bc, re.M)
+    if cpu_variant and cpu_variant.group(1) not in ('cortex-a76', 'kryo'):
+        issues.append(f'TARGET_CPU_VARIANT={cpu_variant.group(1)} (expected cortex-a76 for sm6150 big cores)')
+    if cpu2_variant and cpu2_variant.group(1) not in ('cortex-a55', 'cortex-a76', 'kryo'):
+        issues.append(f'TARGET_2ND_CPU_VARIANT={cpu2_variant.group(1)} (expected cortex-a55 for sm6150 little cores)')
+    # 32-bit code must not target big cores exclusively
+    if cpu2_variant and cpu2_variant.group(1) == 'cortex-a76':
+        warn('C32 2ND_CPU_VARIANT is cortex-a76', 'big-core optimization for 32-bit may fault on little cores (sm6150 is A76+A55 big.LITTLE)')
+    chk('C32 CPU variant sanity (sm6150 big.LITTLE)', not issues, '; '.join(issues))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -626,7 +721,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

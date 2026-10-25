@@ -1452,14 +1452,12 @@ vendor/lib/vendor.qti.hardware.wifidisplaysession@1.0.so;MODULE_SUFFIX=_vendor|c
 vendor/lib/vendor.qti.hardware.wifidisplaysessionl@1.0-halimpl.so|fefea0a3279f850e562cfaaf4fe3b24af1dd3994
 
 # C23 verified dependency resolution (2026-10-24) — caf-repo-filtered
-vendor/lib64/android.hardware.sensors@2.0-ScopedWakelock.so
 system_ext/lib64/android.hidl.base@1.0.so
 vendor/lib64/com.dsi.ant@1.0.so
 vendor/lib64/libWaterMark.so
 vendor/lib64/libavservices_minijail.so
 vendor/lib64/libbluetooth_audio_session.so
 vendor/lib64/libcld80211.so
-vendor/lib64/libcodec2_hidl@1.0.so
 vendor/lib64/libcodec2_vndk.so
 vendor/lib64/libcom.oppo.calidatacontainer.so
 vendor/lib64/libdrm.so
@@ -1471,7 +1469,6 @@ vendor/lib64/liblocation_api.so
 vendor/lib64/liboppo_platform_hwi.so
 vendor/lib64/libril.so
 vendor/lib64/libsensorndkbridge.so
-vendor/lib64/libstagefright_softomx.so
 vendor/lib64/libtinycompress.so
 vendor/lib64/libtinyxml.so
 vendor/lib/libwfdaac_vendor.so

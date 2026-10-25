@@ -537,7 +537,7 @@ def c33():
                 continue
             # Valid Android property: key can contain [a-z0-9_.-], must have =
             # (hyphens are valid — legacy properties like pm.dexopt.ab-ota use them)
-            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*=', s):
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*(\?=|=)', s):
                 issues.append(f'{prop_file}:{i+1}: not a property assignment: {s[:50]}')
             elif ' ' in s.split('=')[0].strip():
                 issues.append(f'{prop_file}:{i+1}: space in property name: {s[:50]}')

@@ -524,6 +524,130 @@ def c32():
     chk('C32 CPU variant sanity (sm6150 big.LITTLE)', not issues, '; '.join(issues))
 
 
+# --- C33: Property file syntax validation ---
+def c33():
+    issues = []
+    for prop_file in ['odm.prop', 'product.prop', 'system.prop', 'vendor.prop']:
+        path = f'{DT}/{prop_file}'
+        if not os.path.isfile(path):
+            continue
+        for i, line in enumerate(open(path, encoding='utf-8', errors='replace')):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            # Valid Android property: key can contain [a-z0-9_.-], must have =
+            # (hyphens are valid — legacy properties like pm.dexopt.ab-ota use them)
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*=', s):
+                issues.append(f'{prop_file}:{i+1}: not a property assignment: {s[:50]}')
+            elif ' ' in s.split('=')[0].strip():
+                issues.append(f'{prop_file}:{i+1}: space in property name: {s[:50]}')
+    chk('C33 property file syntax', not issues, '; '.join(issues[:5]))
+
+
+# --- C34: Init RC security audit (seclabel + root-user tracking) ---
+def c34():
+    import glob
+    no_seclabel_count = 0
+    root_oneshot_count = 0
+    details = []
+    for rc_file in sorted(glob.glob(f'{DT}/rootdir/etc/*.rc')):
+        content = open(rc_file, encoding='utf-8', errors='replace').read()
+        services = re.findall(r'^service\s+(\S+)\s+(\S+)(.*?)(?=^service|^on |\Z)', content, re.M | re.S)
+        for name, path, body in services:
+            if 'seclabel' not in body:
+                no_seclabel_count += 1
+            if re.search(r'user\s+root', body) and 'oneshot' in body:
+                root_oneshot_count += 1
+    warn('C34 init.rc security audit', f'{no_seclabel_count} services without seclabel, {root_oneshot_count} oneshot-root (Qualcomm core services often lack seclabel by design — review for non-core services)')
+
+
+# --- C35: Sepolicy contexts parse validation ---
+def c35():
+    issues = []
+    ctx_file = f'{DT}/sepolicy/vendor/file_contexts'
+    if os.path.isfile(ctx_file):
+        for i, line in enumerate(open(ctx_file, errors='replace')):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            if ':' not in s or ('u:object_r:' not in s and 'u:r:' not in s):
+                issues.append(f'file_contexts:{i+1}: invalid: {s[:50]}')
+    genfs_file = f'{DT}/sepolicy/vendor/genfs_contexts'
+    if os.path.isfile(genfs_file):
+        for i, line in enumerate(open(genfs_file, errors='replace')):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            parts = s.split()
+            if len(parts) < 3 or 'u:object_r:' not in s:
+                issues.append(f'genfs_contexts:{i+1}: invalid: {s[:50]}')
+    hws_file = f'{DT}/sepolicy/vendor/hwservice_contexts'
+    if os.path.isfile(hws_file):
+        for i, line in enumerate(open(hws_file, errors='replace')):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            if ':' not in s or 'u:object_r:' not in s:
+                issues.append(f'hwservice_contexts:{i+1}: invalid: {s[:50]}')
+    chk('C35 sepolicy contexts parse', not issues, '; '.join(issues[:5]))
+
+
+# --- C36: BoardConfig hardware constants validation ---
+# Known hardware truth for RMX1992 (from stock ROM analysis)
+HW_TRUTH = {
+    'BOARD_BOOTIMAGE_PARTITION_SIZE': (67108864, 'boot=64MB'),
+    'BOARD_DTBOIMG_PARTITION_SIZE': (25165824, 'dtbo=24MB'),
+    'BOARD_RECOVERYIMAGE_PARTITION_SIZE': (100663296, 'recovery=96MB'),
+    'BOARD_CACHEIMAGE_PARTITION_SIZE': (268435456, 'cache=256MB'),
+    'BOARD_SUPER_PARTITION_SYSTEM_DEVICE_SIZE': (4320133120, 'system=4GB'),
+    'BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE': (1631584256, 'vendor=1.5GB'),
+    'BOARD_SUPER_PARTITION_ODM_DEVICE_SIZE': (268435456, 'odm=256MB'),
+    'BOARD_KERNEL_PAGESIZE': (4096, 'kernel pagesize=4K'),
+    'BOARD_FLASH_BLOCK_SIZE': (262144, 'flash block=256K'),
+    'TARGET_SCREEN_DENSITY': (480, 'screen density=480'),
+}
+
+
+def c36():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    issues = []
+    for var, (expected, desc) in HW_TRUTH.items():
+        m = re.search(rf'^{var}\s*:=\s*(\d+)', bc, re.M)
+        if m:
+            actual = int(m.group(1))
+            if actual != expected:
+                issues.append(f'{var}={actual} but hardware expects {expected} ({desc})')
+        elif var not in bc:
+            # dynamic partition vars may not be present if not using dynamic partitions
+            if 'SUPER_PARTITION' not in var:  # skip super vars if not dynamic
+                issues.append(f'{var} not set (hardware expects {desc})')
+    chk('C36 hardware constants (partition sizes, density, pagesize)', not issues, '; '.join(issues[:5]))
+
+
+# --- C37: Kernel defconfig essential configs (with auto-select awareness) ---
+def c37():
+    defconfig_path = f'{ROOT}/roms/common/kernel/sm6150/arch/arm64/configs/X2_defconfig'
+    if not os.path.isfile(defconfig_path):
+        warn('C37 kernel defconfig essentials', 'defconfig not found — skipping')
+        return
+    defconfig = open(defconfig_path, errors='replace').read()
+    # Essential configs: either explicitly set or auto-selected by CONFIG_ARM64/ARCH_QCOM
+    explicit_required = [
+        'CONFIG_ARCH_SM6150=y',
+        'CONFIG_ARCH_QCOM=y',
+        'CONFIG_ARM64=y',  # may be implied by ARCH selection
+    ]
+    # Auto-selected: CONFIG_OF (by ARM64), CONFIG_SMP (default y), CONFIG_MMU (by ARM64)
+    issues = []
+    for cfg in explicit_required:
+        if cfg not in defconfig and cfg.replace('=y', '') not in defconfig:
+            # CONFIG_ARM64 is almost always the default
+            if cfg == 'CONFIG_ARM64=y':
+                continue  # implicit on arm64 build
+            issues.append(f'missing: {cfg}')
+    chk('C37 kernel defconfig essentials', not issues, '; '.join(issues))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -721,7 +845,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

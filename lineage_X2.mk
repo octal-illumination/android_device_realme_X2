@@ -10,13 +10,13 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base_telephony.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/product_launched_with_p.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/non_ab_device.mk)
 
-# Inherit some common Evox stuff.
+# Inherit some common LineageOS stuff.
 $(call inherit-product, vendor/lineage/config/common_full_phone.mk)
 
 # Inherit from X2 device
 $(call inherit-product, device/realme/X2/device.mk)
 
-# Evox stuff
+# LineageOS stuff
 TARGET_BOOT_ANIMATION_RES := 1080
 SYSTEM_OPTIMIZE_JAVA := true
 SYSTEMUI_OPTIMIZE_JAVA := true

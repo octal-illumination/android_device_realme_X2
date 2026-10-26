@@ -912,6 +912,42 @@ def c42():
     chk('C42 power HAL consistency', not issues, '; '.join(issues))
 
 
+# --- C43: Makefile variable re-definition wipe (born from BOARD_MKBOOTIMG_ARGS bug) ---
+# Detects := assignments that wipe previous += accumulations
+def c43():
+    issues = []
+    for mk_file in ['BoardConfig.mk', 'device.mk', 'lineage_X2.mk']:
+        path = f'{DT}/{mk_file}'
+        if not os.path.isfile(path):
+            continue
+        lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
+        vars_with_plus = {}  # var -> list of line numbers with +=
+        vars_with_assign = {}  # var -> list of line numbers with :=
+        for i, line in enumerate(lines, 1):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            m_plus = re.match(r'^(\w+)\s*\+=', s)
+            m_assign = re.match(r'^(\w+)\s*:=', s)
+            if m_plus:
+                var = m_plus.group(1)
+                vars_with_plus.setdefault(var, []).append(i)
+            if m_assign:
+                var = m_assign.group(1)
+                vars_with_assign.setdefault(var, []).append(i)
+        # find vars that have += BEFORE a later :=
+        for var, assign_lines in vars_with_assign.items():
+            if var in vars_with_plus:
+                for assign_line in assign_lines:
+                    earlier_pluses = [p for p in vars_with_plus[var] if p < assign_line]
+                    if earlier_pluses:
+                        issues.append(
+                            f'{mk_file}:{assign_line}: {var} := WIPES {len(earlier_pluses)} earlier += assignments '
+                            f'(lines {earlier_pluses}) — use += instead'
+                        )
+    chk('C43 variable re-definition wipe', not issues, '; '.join(issues[:5]))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1126,7 +1162,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

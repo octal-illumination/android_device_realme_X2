@@ -1068,6 +1068,59 @@ def c48():
     # else: silent pass
 
 
+# --- C49: Upstream code quality audit (sensors/gps/location — never skip) ---
+# Tracks TODO/FIXME and raw printf() in upstream Qualcomm/AOSP code.
+# These are WARN-level: upstream issues we inherit, not bugs we introduced.
+# snprintf is NOT printf — it's standard string formatting (excluded).
+def c49():
+    upstream_dirs = ['sensors', 'gps', 'location']
+    todos = []
+    raw_printf = []
+    for src_file in glob.glob(f'{DT}/**/*.cpp', recursive=True) + glob.glob(f'{DT}/**/*.h', recursive=True):
+        rel = os.path.relpath(src_file, DT)
+        top_dir = rel.split(os.sep)[0] if os.sep in rel else rel
+        if top_dir not in upstream_dirs:
+            continue
+        try:
+            lines = open(src_file, errors='replace').read().split('\n')
+        except Exception:
+            continue
+        for i, line in enumerate(lines, 1):
+            s = line.strip()
+            if not s:
+                continue
+            # TODO/FIXME/HACK (exclude comment-only lines with bug refs — those are tracked upstream)
+            m = re.search(r'\b(TODO|FIXME|HACK)\b', s)
+            if m:
+                todos.append(f'{rel}:{i}: {m.group()}: {s[:50]}')
+            # raw printf() — NOT snprintf (which is standard formatting)
+            # Must be printf( at start of call, not part of snprintf/fprintf/sprintf
+            if re.search(r'(?<![a-z])printf\s*\(', s) and not re.search(r'(snprintf|fprintf|sprintf|vprintf|dprintf|asprintf|wprintf)', s):
+                # exclude test apps (printf is normal there)
+                if 'test' not in rel.lower() and 'testapp' not in rel.lower():
+                    raw_printf.append(f'{rel}:{i}: {s[:50]}')
+    # Compare against upstream baseline — only warn if WE added new issues
+    baseline_path = f'{ROOT}/roms/common/tools/ref/upstream_known_issues.txt'
+    expected_todo, expected_printf = 10, 10  # defaults
+    if os.path.isfile(baseline_path):
+        for line in open(baseline_path):
+            line = line.strip()
+            if line and not line.startswith('#'):
+                parts = line.split()
+                if len(parts) >= 2:
+                    expected_todo = int(parts[0])
+                    expected_printf = int(parts[1])
+                    break
+    summary = []
+    if len(todos) > expected_todo:
+        summary.append(f'{len(todos)} TODO/FIXME (expected {expected_todo} upstream — WE added {len(todos) - expected_todo} new ones)')
+    if len(raw_printf) > expected_printf:
+        summary.append(f'{len(raw_printf)} raw printf() (expected {expected_printf} upstream — WE added {len(raw_printf) - expected_printf} new ones)')
+    if summary:
+        warn('C49 upstream code audit (DEVIATION from baseline)', '; '.join(summary))
+    # if within baseline: silent pass — upstream state is expected
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1282,7 +1335,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

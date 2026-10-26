@@ -1121,6 +1121,88 @@ def c49():
     # if within baseline: silent pass — upstream state is expected
 
 
+# --- C50: Platform version compatibility matrix (born from A16 deep analysis) ---
+# Validates that our tree's versions and configs are compatible with the
+# target platform (Android 16 / LineageOS 23.2).
+def c50():
+    issues = []
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+
+    # 1. Kernel source must be set
+    if 'TARGET_KERNEL_SOURCE := kernel/realme/sm6150' not in bc:
+        issues.append('TARGET_KERNEL_SOURCE not set or wrong path')
+    if 'TARGET_KERNEL_CONFIG := X2_defconfig' not in bc:
+        issues.append('TARGET_KERNEL_CONFIG not set to X2_defconfig')
+
+    # 2. Sepolicy variant must reference a valid dir in lineage-23.2-legacy-um
+    m = re.search(r'TARGET_SEPOLICY_DIR\s*:=\s*(\S+)', bc)
+    if m:
+        sepolicy_variant = m.group(1)
+        # Known valid variants in lineage-23.2-legacy-um branch
+        valid_variants = {'msmsteppe', 'msmnile', 'atoll', 'bengal', 'bengal_32go',
+                         'holi', 'kona', 'lahaina', 'lito', 'sdm710', 'sdm845', 'common', 'ssg'}
+        if sepolicy_variant not in valid_variants:
+            issues.append(f'TARGET_SEPOLICY_DIR={sepolicy_variant} not in known valid variants for lineage-23.2-legacy-um')
+
+    # 3. Build flags: must NOT have BUILD_BROKEN (Android 14+ requirement)
+    broken_flags = re.findall(r'^(BUILD_BROKEN_\w+)\s*:=\s*true', bc, re.M)
+    if broken_flags:
+        issues.append(f'BUILD_BROKEN flags present (Android 16 requires none): {", ".join(broken_flags)}')
+
+    # 4. SELinux: must NOT be permissive
+    if 'androidboot.selinux=permissive' in bc:
+        issues.append('selinux=permissive in cmdline — must boot enforcing')
+    if re.search(r'^SELINUX_IGNORE_NEVERALLOWS\s*:=\s*true', bc, re.M):
+        issues.append('SELINUX_IGNORE_NEVERALLOWS — masks real violations')
+
+    # 5. Dynamic partitions: must be present for this hardware
+    if 'BOARD_SUPER_PARTITION_BLOCK_DEVICES' not in bc:
+        issues.append('no dynamic partition config (hardware requires super partition)')
+    if 'logical' not in open(f'{DT}/rootdir/etc/fstab.qcom', encoding='utf-8', errors='replace').read():
+        issues.append('fstab lacks logical partition entries')
+
+    # 6. AVB: flags 3 is dev mode (acceptable but noted)
+    if '--flags 3' in bc:
+        # flags 3 = verity disabled + verification disabled (dev mode)
+        pass  # acceptable for development builds
+
+    # 7. HIDL interfaces: framework-discovered HALs MUST be in manifest
+    # (audio/camera/keymaster are discovered via VINTF — missing = feature broken)
+    manifest = open(f'{DT}/manifest.xml', encoding='utf-8', errors='replace').read()
+    for critical_hal in ['android.hardware.audio', 'android.hardware.camera.provider', 'android.hardware.keymaster']:
+        if critical_hal not in manifest:
+            issues.append(f'manifest missing critical HAL: {critical_hal}')
+    # Self-registering HALs (health/power/usb) don't need manifest but should be there
+    self_registering = ['android.hardware.health', 'android.hardware.power', 'android.hardware.usb']
+    missing_self_reg = [h for h in self_registering if h not in manifest]
+    if missing_self_reg:
+        warn('C50 self-registering HALs not in manifest (non-blocking)',
+             f'{", ".join(missing_self_reg)} — they self-register at runtime but SHOULD be declared')
+
+    # 8. VINTF: warn about ancient interfaces (may not exist in A16)
+    compat_matrix = f'{DT}/compatibility_matrix.xml'
+    if os.path.isfile(compat_matrix):
+        cm = open(compat_matrix, encoding='utf-8', errors='replace').read()
+        ancient_interfaces = []
+        for old_iface in ['android.frameworks.schedulerservice', 'android.frameworks.sensorservice']:
+            if old_iface in cm:
+                ancient_interfaces.append(old_iface)
+        if ancient_interfaces:
+            warn('C50 ancient VINTF interfaces in compatibility_matrix',
+                 f'may not exist in Android 16: {", ".join(ancient_interfaces)} — update or remove')
+
+    # 9. Kernel defconfig: check critical Android configs
+    defconfig_path = f'{ROOT}/roms/common/kernel/sm6150/arch/arm64/configs/X2_defconfig'
+    if os.path.isfile(defconfig_path):
+        dc = open(defconfig_path, encoding='utf-8', errors='replace').read()
+        for critical_config in ['CONFIG_ANDROID_BINDER_IPC=y', 'CONFIG_ASHMEM=y',
+                                'CONFIG_SECURITY_SELINUX=y', 'CONFIG_ARCH_SM6150=y']:
+            if critical_config not in dc:
+                issues.append(f'X2_defconfig missing: {critical_config}')
+
+    chk('C50 platform compatibility (Android 16 / LOS 23.2 / sm6150)', not issues, '; '.join(issues[:5]))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1335,7 +1417,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

@@ -309,15 +309,22 @@ def c24():
             if base_name in caf_cache:
                 continue
             found = False
-            for part in ['vendor/bin/hw', 'vendor/bin', 'odm/bin/hw', 'odm/bin']:
-                if os.path.isfile(f'{VND}/proprietary/{part}/{binary}') or os.path.isfile(f'{DUMP}/{part}/{binary}'):
-                    found = True
+            # strip legacy path prefixes for lookup
+            base_name = binary.split('/')[-1]
+            legacy_stripped = binary.replace('system/vendor/', 'vendor/').replace('system/bin/', '')
+            for part in ['vendor/bin/hw', 'vendor/bin', 'odm/bin/hw', 'odm/bin', 'system_ext/bin', 'system/bin']:
+                for bin_path in [binary, legacy_stripped, base_name]:
+                    if os.path.isfile(f'{VND}/proprietary/{part}/{bin_path}') or os.path.isfile(f'{DUMP}/{part}/{bin_path}'):
+                        found = True
+                        break
+                if found:
                     break
             if not found and glob.glob(f'{DT}/**/{base_name}', recursive=True):
                 found = True
             if not found:
                 missing.append(binary)
-    warn('C24 RC service binaries (audit)', f'{len(missing)} binaries referenced in .rc not found in blobs/tree: ' + ', '.join(missing[:5]) if missing else 'all service binaries resolve')
+    if missing:
+        warn('C24 RC service binaries (audit)', f'{len(missing)} binaries referenced in .rc not found in blobs/tree: ' + ', '.join(missing[:5]))
 
 
 # --- C25: DT_NEEDED closure spot-check (WARN — audit level) ---
@@ -384,7 +391,8 @@ def c25():
                 unresolved.add(lib)
         except Exception:
             pass
-    warn('C25 DT_NEEDED closure (audit)', f'{len(unresolved)} unresolved names from {checked} blobs: ' + ', '.join(sorted(unresolved)[:8]) if unresolved else f'all {checked} blob DT_NEEDED entries resolve')
+    if unresolved:
+        warn('C25 DT_NEEDED closure (audit)', f'{len(unresolved)} unresolved names from {checked} blobs: ' + ', '.join(sorted(unresolved)[:8]))
 
 
 # --- C26: fstab partition audit (WARN — with standard whitelist) ---
@@ -834,7 +842,7 @@ def c41():
                 s = line.strip()
                 if not s or s.startswith('#'):
                     continue
-                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*=', s):
+                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.\-]*\s*(\?=|=)', s):
                     # found a line our C33 would flag but golden tree builds with it
                     fp_issues.append(f'C33 would flag {prop}:{i+1}: {s[:40]}... (golden tree builds with this)')
 
@@ -881,8 +889,7 @@ def c41():
     # === Summary ===
     if fp_issues:
         warn('C41 golden-tree cross-validation', f'{len(fp_issues)} potential false positives detected: ' + '; '.join(fp_issues[:5]))
-    else:
-        warn('C41 golden-tree cross-validation', 'no false positives — all checks pass against known-good tree')
+    # else: no false positives — don't warn
 
 
 # --- C42: Power HAL consistency (born from power/ Android.bp gap) ---

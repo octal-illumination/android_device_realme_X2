@@ -948,6 +948,126 @@ def c43():
     chk('C43 variable re-definition wipe', not issues, '; '.join(issues[:5]))
 
 
+# --- C44: Stale comment/documentation detection (born from Evox refs) ---
+# Detects references to OTHER ROM names in .mk files (stale from forks)
+STALE_ROM_REFS = ['Evox', 'EvolutionX', 'Evolution-X', 'evo', 'crDroid', 'PixelOS',
+                  'Rising', 'DerpFest', 'ArrowOS', 'OctaviOS', 'CorvusOS']
+# Directories containing OUR custom code (vs upstream Qualcomm/AOSP)
+CUSTOM_CODE_DIRS = {'libinit', 'udfps_wrapper', 'proximityservice', 'libshims', 'lights', 'interfaces'}
+UPSTREAM_CODE_DIRS = {'sensors', 'gps', 'location', 'RealmeParts'}
+
+
+def c44():
+    issues = []
+    for mk_file in ['BoardConfig.mk', 'device.mk', 'lineage_X2.mk', 'AndroidProducts.mk']:
+        path = f'{DT}/{mk_file}'
+        if not os.path.isfile(path):
+            continue
+        for i, line in enumerate(open(path, encoding='utf-8', errors='replace'), 1):
+            for stale in STALE_ROM_REFS:
+                if re.search(rf'\b{re.escape(stale)}\b', line, re.I):
+                    issues.append(f'{mk_file}:{i}: stale ROM reference "{stale}": {line.strip()[:50]}')
+    chk('C44 stale ROM references in comments', not issues, '; '.join(issues[:5]))
+
+
+# --- C45: TODO/FIXME/HACK in custom code only ---
+def c45():
+    issues = []
+    for src_file in glob.glob(f'{DT}/**/*.cpp', recursive=True) + glob.glob(f'{DT}/**/*.h', recursive=True) + glob.glob(f'{DT}/**/*.java', recursive=True):
+        rel = os.path.relpath(src_file, DT)
+        top_dir = rel.split(os.sep)[0] if os.sep in rel else rel
+        if top_dir in UPSTREAM_CODE_DIRS or 'RealmeParts' in rel:
+            continue  # upstream code — not our responsibility
+        if top_dir not in CUSTOM_CODE_DIRS:
+            continue  # only check our custom code
+        for i, line in enumerate(open(src_file, errors='replace'), 1):
+            m = re.search(r'\b(TODO|FIXME|HACK)\b', line)
+            if m:
+                issues.append(f'{rel}:{i}: {m.group()}: {line.strip()[:50]}')
+    chk('C45 TODO/FIXME/HACK in custom code', not issues, '; '.join(issues[:5]))
+
+
+# --- C46: Duplicate PRODUCT_PACKAGES entries ---
+def c46():
+    mk = open(f'{DT}/device.mk', encoding='utf-8', errors='replace').read()
+    entries = []
+    for m in re.finditer(r'PRODUCT_PACKAGES\s*\+=\s*\\?\n((?:\s+\S+\\?\n)+)', mk):
+        for entry in re.findall(r'\s+(\S+)\\?\n', m.group(1) + '\n'):
+            entries.append(entry)
+    seen = {}
+    dupes = []
+    for e in entries:
+        if e in seen:
+            dupes.append(e)
+        seen[e] = True
+    chk('C46 duplicate PRODUCT_PACKAGES entries', not dupes, f'duplicates: {", ".join(sorted(set(dupes))[:5])}')
+
+
+# --- C47: ueventd.rc format validation ---
+def c47():
+    issues = []
+    path = f'{DT}/rootdir/ueventd.rc'
+    if not os.path.isfile(path):
+        return
+    KNOWN_DIRECTIVES = {'firmware_directories', 'audio'}
+    for i, line in enumerate(open(path, errors='replace'), 1):
+        s = line.strip()
+        if not s or s.startswith('#'):
+            continue
+        first_word = s.split()[0] if s.split() else ''
+        if first_word in KNOWN_DIRECTIVES:
+            continue
+        if s == '*' or s == '*/' or s.endswith('*/'):
+            continue  # wildcard or comment terminator
+        if not s.startswith('/'):
+            issues.append(f'ueventd.rc:{i}: not a device path or directive: {s[:50]}')
+        else:
+            # device node format: /path user group mode [options]
+            parts = s.split()
+            if len(parts) < 4:
+                issues.append(f'ueventd.rc:{i}: too few fields ({len(parts)}): {s[:50]}')
+            else:
+                # ueventd has two formats:
+                # Device nodes: /dev/path mode user group (mode at index 1)
+                # Sysfs with param: /sys/path param_name mode user group (mode at index 2)
+                mode = ''
+                if len(parts) >= 4:
+                    if re.match(r'^0?[0-7]{3,4}$', parts[1]):
+                        mode = parts[1]  # standard: mode at index 1
+                    elif len(parts) >= 5 and re.match(r'^0?[0-7]{3,4}$', parts[2]):
+                        mode = parts[2]  # sysfs param: mode at index 2
+                    else:
+                        mode = parts[1]  # fallback — will fail validation below
+                if not re.match(r'^0?[0-7]{3,4}$', mode):
+                    issues.append(f'ueventd.rc:{i}: invalid mode "{mode}": {s[:50]}')
+    chk('C47 ueventd.rc format', not issues, '; '.join(issues[:5]))
+
+
+# --- C48: Hardcoded paths in custom source code ---
+def c48():
+    issues = []
+    for src_file in glob.glob(f'{DT}/**/*.cpp', recursive=True) + glob.glob(f'{DT}/**/*.h', recursive=True):
+        rel = os.path.relpath(src_file, DT)
+        top_dir = rel.split(os.sep)[0] if os.sep in rel else rel
+        if top_dir not in CUSTOM_CODE_DIRS:
+            continue
+        for i, line in enumerate(open(src_file, errors='replace'), 1):
+            s = line.strip()
+            if not s or s.startswith('//') or s.startswith('#') or s.startswith('*'):
+                continue
+            # Check for hardcoded system paths that should be configurable
+            m = re.search(r'"(/(?:system|vendor|data|odm)/\w[^"]*)"', s)
+            if m:
+                path_val = m.group(1)
+                # Some paths are fine (e.g., /vendor/lib/hw/ is the standard HAL path)
+                if path_val not in ('/vendor/etc/', '/vendor/lib/hw/', '/vendor/lib64/hw/',
+                                    '/odm/lib/hw/', '/odm/lib64/hw/', '/vendor/bin/hw/'):
+                    issues.append(f'{rel}:{i}: hardcoded path "{path_val}": {s[:50]}')
+    if issues:
+        warn('C48 hardcoded paths in custom code', '; '.join(issues[:5]))
+    # else: silent pass
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1162,7 +1282,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

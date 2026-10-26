@@ -876,6 +876,26 @@ def c41():
         warn('C41 golden-tree cross-validation', 'no false positives — all checks pass against known-good tree')
 
 
+# --- C42: Power HAL consistency (born from power/ Android.bp gap) ---
+def c42():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    mk = open(f'{DT}/device.mk', encoding='utf-8', errors='replace').read()
+    issues = []
+    # If BoardConfig references power extension files, the power HAL must use them
+    has_ext = 'TARGET_POWERHAL_BOOST_EXT' in bc or 'TARGET_POWERHAL_MODE_EXT' in bc
+    uses_libperfmgr = 'power-service.lineage-libperfmgr' in mk
+    uses_qti = 'power-service-qti' in mk
+    if has_ext and not uses_libperfmgr:
+        # extension files referenced but consumed only by libperfmgr power HAL
+        if uses_qti:
+            issues.append('TARGET_POWERHAL_*_EXT referenced but device uses QTI power HAL (extensions unused — switch to lineage-libperfmgr or remove refs)')
+        # check Android.bp exists for power/
+    power_bp = f'{DT}/power/Android.bp'
+    if has_ext and not os.path.isfile(power_bp):
+        issues.append('power/ extension .cpp files exist but no power/Android.bp to build them')
+    chk('C42 power HAL consistency', not issues, '; '.join(issues))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1073,7 +1093,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

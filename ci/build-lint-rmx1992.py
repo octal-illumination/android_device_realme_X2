@@ -235,6 +235,17 @@ def c23():
             syslib_cache.update(_line.split())
     combined_cache = iface_cache | caf_cache | syslib_cache
 
+    # Names our own DEVICE TREE builds from source (C23 blind-spot fix 2026-10-28: deps
+    # must resolve against these too — else the tooling force-adds redundant prebuilts,
+    # which is how the android.hidl.base@1.0 system_ext prebuilt got created in the 38-blob round)
+    device_tree_modules = set()
+    for bp_path in glob.glob(f'{DT}/**/Android.bp', recursive=True):
+        try:
+            device_tree_modules.update(re.findall(r'^\s*name:\s*"([^"]+)"',
+                                                  open(bp_path, encoding='utf-8', errors='replace').read(), re.M))
+        except OSError:
+            pass
+
     bp = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
     our_modules = set(re.findall(r'^\s*name:\s*"([^"]+)"', bp, re.M))
     # all shared_libs entries (inside cc_prebuilt blocks)
@@ -257,6 +268,9 @@ def c23():
             continue
         # Check against combined cache (HIDL interfaces + caf repo source-built modules)
         if stem in combined_cache or lib in combined_cache:
+            continue
+        # Provided by our own device tree (source-built) — resolvable, NOT a missing blob
+        if stem in device_tree_modules or lib in device_tree_modules:
             continue
         # Not in our modules, not in base, not in interface/caf caches — is it in the dump?
         dump_path = f'/tmp/rmx_pp/vendor-trust/f26_dump/odm/lib64/{stem}.so'
@@ -1607,8 +1621,35 @@ def c9():
              f'{len(truly_missing)} names: ' + ', '.join(truly_missing[:15]))
 
 
+# --- C56: vendor-prebuilt vs device-tree-source same-name pairs (guarded override allowlist) ---
+# Same-name pairs are LEGAL soong prebuilt-over-source overrides when same-partition, but a NEW
+# pair appearing means either a forced prebuilt-add (C23 blind spot) or a tree inconsistency —
+# both must be consciously allowlisted in ref/device_tree_shared_names.txt with evidence.
+def c56():
+    ours = set(re.findall(r'^\s*name:\s*"([^"]+)"',
+                          open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read(), re.M))
+    theirs = set()
+    for bp_path in glob.glob(f'{DT}/**/Android.bp', recursive=True):
+        try:
+            theirs.update(re.findall(r'^\s*name:\s*"([^"]+)"',
+                                     open(bp_path, encoding='utf-8', errors='replace').read(), re.M))
+        except OSError:
+            pass
+    shared = ours & theirs
+    allow_path = f'{ROOT}/roms/common/tools/ref/device_tree_shared_names.txt'
+    allowed = set()
+    if os.path.isfile(allow_path):
+        for _line in open(allow_path):
+            _line = _line.strip()
+            if _line and not _line.startswith('#'):
+                allowed.add(_line.split()[0])
+    new_pairs = shared - allowed
+    chk('C56 vendor-vs-device-tree name pairs (allowlisted overrides only)', not new_pairs,
+        f'{len(new_pairs)} undocumented pair(s): ' + ', '.join(sorted(new_pairs)[:5]))
+
+
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

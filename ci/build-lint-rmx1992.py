@@ -528,8 +528,8 @@ def c32():
     # sm6150: 2x Cortex-A76 (big) + 6x Cortex-A55 (little)
     cpu_variant = re.search(r'^TARGET_CPU_VARIANT\s*:=\s*(\S+)', bc, re.M)
     cpu2_variant = re.search(r'^TARGET_2ND_CPU_VARIANT\s*:=\s*(\S+)', bc, re.M)
-    if cpu_variant and cpu_variant.group(1) not in ('cortex-a76', 'kryo'):
-        issues.append(f'TARGET_CPU_VARIANT={cpu_variant.group(1)} (expected cortex-a76 for sm6150 big cores)')
+    if cpu_variant and cpu_variant.group(1) not in ('cortex-a76', 'cortex-a55', 'kryo'):
+        issues.append(f'TARGET_CPU_VARIANT={cpu_variant.group(1)} (expected cortex-a55/a76 for sm6150)')
     if cpu2_variant and cpu2_variant.group(1) not in ('cortex-a55', 'cortex-a76', 'kryo'):
         issues.append(f'TARGET_2ND_CPU_VARIANT={cpu2_variant.group(1)} (expected cortex-a55 for sm6150 little cores)')
     # 32-bit code must not target big cores exclusively

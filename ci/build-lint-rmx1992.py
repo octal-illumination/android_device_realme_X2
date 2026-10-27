@@ -518,21 +518,34 @@ def c30():
         warn('C30 BUILD_BROKEN flags (technical debt)', f'{len(flags)} masking flags present: {", ".join(flags)}')
 
 
-# --- C31: Partition layout consistency (born from dynamic partitions gap) ---
+# --- C31: Partition topology consistency (GPT-verified PHYSICAL device) ---
+# RMX1992 GPT (rawprogram*.xml census — firmware-images-inventory.md §3): NO super
+# partition; system/vendor/odm are PHYSICAL; system_ext/product live inside the
+# system image (folders). The 2026-10-28 queue-time audit reverted a Jigen-copied
+# retrofit-dynamic config that would have built an unbootable image on this GPT.
 def c31():
     bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    fstab = open(f'{DT}/rootdir/etc/fstab.qcom', encoding='utf-8', errors='replace').read()
     has_dynamic = 'BOARD_SUPER_PARTITION_BLOCK_DEVICES' in bc
     has_static = bool(re.search(r'^BOARD_SYSTEMIMAGE_PARTITION_SIZE', bc, re.M))
-    fstab = open(f'{DT}/rootdir/etc/fstab.qcom', encoding='utf-8', errors='replace').read()
-    has_logical_fstab = 'logical' in fstab
+    has_logical_fstab = bool(re.search(r'^[^#].*wait,logical\b', fstab, re.M))
+    has_physical_fstab = bool(re.search(r'^/dev/block/by-name/system\s', fstab, re.M))
     issues = []
-    if has_dynamic and not has_logical_fstab:
-        issues.append('BoardConfig has dynamic partitions but fstab lacks logical entries')
-    if not has_dynamic and has_logical_fstab:
-        issues.append('fstab has logical entries but BoardConfig lacks dynamic partition config')
-    if not has_dynamic:
-        issues.append('no dynamic partition config (hardware may require super partition — verify)')
-    chk('C31 partition layout consistency', not issues, '; '.join(issues))
+    if has_dynamic:
+        issues.append('retrofit-dynamic config present on a PHYSICAL-GPT device (unbootable!)')
+    if not has_static:
+        issues.append('missing physical BOARD_SYSTEMIMAGE_PARTITION_SIZE')
+    if has_logical_fstab:
+        issues.append('fstab has logical entries but the device GPT is physical')
+    if not has_physical_fstab:
+        issues.append('fstab lacks physical /dev/block/by-name/system entry')
+    for var in ('BOARD_VENDORIMAGE_PARTITION_SIZE', 'BOARD_ODMIMAGE_PARTITION_SIZE',
+                'BOARD_SYSTEMIMAGE_PARTITION_SIZE', 'BOARD_USES_METADATA_PARTITION'):
+        if var not in bc:
+            issues.append(f'missing {var}')
+    if re.search(r'^system_ext\s+\s*/system_ext', fstab, re.M):
+        issues.append('fstab mounts system_ext — it is a folder inside system on this device')
+    chk('C31 partition topology (physical, GPT-verified)', not issues, '; '.join(issues))
 
 
 # --- C32: CPU variant sanity vs sm6150 big.LITTLE topology ---
@@ -1314,9 +1327,10 @@ def c53():
     # Recommended vars (match official sm6150)
     recommended_vars = {
         'BOARD_INCLUDE_RECOVERY_DTBO': 'recovery DTBO support',
-        'BOARD_SUPER_PARTITION_BLOCK_DEVICES': 'dynamic partition support',
-        'BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST': 'QTI dynamic partition list (QTI code references this)',
     }
+    # NOTE 2026-10-28: dynamic-partition vars REMOVED from recommended — this
+    # device's GPT is physical (no super; see C31). Retrofit-dynamic config is
+    # unbootable here; C31 actively forbids it now.
     for var, why in required_vars.items():
         if var not in bc:
             issues.append(f'missing required: {var} ({why})')

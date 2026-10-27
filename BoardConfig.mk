@@ -116,23 +116,20 @@ BOARD_USERDATAIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_FLASH_BLOCK_SIZE := 262144 # (BOARD_KERNEL_PAGESIZE * 64)
 BOARD_USES_METADATA_PARTITION := true
 
-# Partitions - Dynamic
-BOARD_SUPER_PARTITION_BLOCK_DEVICES := odm system vendor
-BOARD_SUPER_PARTITION_METADATA_DEVICE := system
-BOARD_SUPER_PARTITION_ODM_DEVICE_SIZE := 268435456
-BOARD_SUPER_PARTITION_SYSTEM_DEVICE_SIZE := 4320133120
-BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE := 1631584256
-BOARD_SUPER_PARTITION_SIZE := $(shell expr $(BOARD_SUPER_PARTITION_ODM_DEVICE_SIZE) + $(BOARD_SUPER_PARTITION_SYSTEM_DEVICE_SIZE) + $(BOARD_SUPER_PARTITION_VENDOR_DEVICE_SIZE) )
+# Partitions - Physical (device GPT: NO super — system/vendor/odm are physical
+# partitions; system_ext/product fold into the system image as folders, exactly
+# like stock F.26. Verified: firmware-images-inventory.md §3 GPT census + stock
+# fstab (2026-10-28 queue-time audit). NEVER reintroduce retrofit-dynamic config —
+# this device cannot boot it (no super metadata support on the stock bootloader).
+BOARD_SYSTEMIMAGE_PARTITION_SIZE := 4320133120
+BOARD_SYSTEMIMAGE_PARTITION_TYPE := ext4
+BOARD_VENDORIMAGE_PARTITION_SIZE := 1631584256
+BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_ODMIMAGE_PARTITION_SIZE := 268435456
+BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
 
-BOARD_SUPER_PARTITION_GROUPS := X2_dynpart
-BOARD_X2_DYNPART_SIZE := $(shell expr $(BOARD_SUPER_PARTITION_SIZE) - 4194304 )
-BOARD_X2_DYNPART_PARTITION_LIST := odm product system system_ext vendor
-BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST := $(BOARD_X2_DYNPART_PARTITION_LIST)
-
-# Partitions - FileSystem
-$(foreach p, $(call to-upper, $(BOARD_X2_DYNPART_PARTITION_LIST)), \
-    $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := ext4) \
-    $(eval TARGET_COPY_OUT_$(p) := $(call to-lower, $(p))))
+TARGET_COPY_OUT_VENDOR := vendor
+TARGET_COPY_OUT_ODM := odm
 
 TARGET_COPY_OUT_PRODUCT := product
 TARGET_COPY_OUT_SYSTEM_EXT := system_ext

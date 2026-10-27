@@ -1203,6 +1203,130 @@ def c50():
     chk('C50 platform compatibility (Android 16 / LOS 23.2 / sm6150)', not issues, '; '.join(issues[:5]))
 
 
+# --- C51: Manifest HALs ↔ hwservice_contexts cross-reference (born from Round 1) ---
+# Every vendor-specific HAL in manifest.xml must have a hwservice_contexts entry
+# (either in our tree or in the base sepolicy). Without it, hwservice manager
+# rejects the HAL registration at boot.
+def c51():
+    import xml.etree.ElementTree as ET
+    import urllib.request
+    issues = []
+
+    manifest = open(f'{DT}/manifest.xml', encoding='utf-8', errors='replace').read()
+    root = ET.parse(f'{DT}/manifest.xml').getroot()
+    manifest_hals = {h.text for h in root.iter('name')}
+
+    # Standard HALs are covered by base system/sepolicy
+    standard = {h for h in manifest_hals if h.startswith(('android.', 'com.android.'))}
+    vendor_specific = manifest_hals - standard
+
+    # Our hwservice_contexts
+    our_hws = set()
+    hws_path = f'{DT}/sepolicy/vendor/hwservice_contexts'
+    if os.path.isfile(hws_path):
+        for line in open(hws_path, errors='replace'):
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            if '::' in s:
+                our_hws.add(s.split('::')[0])
+
+    # Base sepolicy hwservice_contexts (cached locally to avoid network fetch)
+    base_hws_path = f'{ROOT}/roms/common/tools/ref/base_hwservice_contexts.txt'
+    if os.path.isfile(base_hws_path):
+        base_hws = set(x.strip() for x in open(base_hws_path) if x.strip() and not x.strip().startswith('#'))
+    else:
+        base_hws = set()
+        warn('C51 base hwservice_contexts cache', f'missing at {base_hws_path} — run the fetch script to build it')
+
+    all_hws = our_hws | base_hws
+    missing = vendor_specific - all_hws
+    chk('C51 manifest HALs have hwservice_contexts', not missing,
+        f'{len(missing)} HALs without hwservice_contexts (face/camera/fingerprint will break): {", ".join(sorted(missing)[:5])}')
+
+
+# --- C52: File encoding and line-ending validation (born from Round 7 CRLF bug) ---
+def c52():
+    issues = []
+    # Check all .rc files for CRLF
+    for rc in glob.glob(f'{DT}/rootdir/etc/*.rc') + glob.glob(f'{DT}/rootdir/bin/*.sh'):
+        rel = os.path.relpath(rc, DT)
+        with open(rc, 'rb') as f:
+            data = f.read()
+        if b'\r\n' in data:
+            issues.append(f'{rel}: Windows line endings (\\r\\n)')
+        if b'\x00' in data:
+            issues.append(f'{rel}: contains null bytes')
+        if data[:3] == b'\xef\xbb\xbf':
+            issues.append(f'{rel}: UTF-8 BOM')
+    # Check .prop files
+    for pf in ['odm.prop', 'product.prop', 'system.prop', 'vendor.prop']:
+        path = f'{DT}/{pf}'
+        if not os.path.isfile(path):
+            continue
+        with open(path, 'rb') as f:
+            data = f.read()
+        if b'\r\n' in data:
+            issues.append(f'{pf}: Windows line endings')
+        try:
+            data.decode('utf-8')
+        except UnicodeDecodeError:
+            issues.append(f'{pf}: not valid UTF-8')
+    # Check XML files for BOM
+    for xml in glob.glob(f'{DT}/**/*.xml', recursive=True):
+        if '.git' in xml or 'RealmeParts' in xml:
+            continue
+        with open(xml, 'rb') as f:
+            if f.read(3) == b'\xef\xbb\xbf':
+                issues.append(f'{os.path.relpath(xml, DT)}: UTF-8 BOM')
+    chk('C52 file encoding/line-endings', not issues, '; '.join(issues[:5]))
+
+
+# --- C53: Required BoardConfig variables (born from Round 8 sm6150 comparison) ---
+def c53():
+    bc = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    issues = []
+    # Critical vars for sm6150 on Android 16 (from official LOS sm6150-common)
+    required_vars = {
+        'BOARD_INCLUDE_DTB_IN_BOOTIMG': 'DTB must be packed into boot.img (without it, device can\'t boot)',
+        'BOARD_KERNEL_IMAGE_NAME': 'kernel image name',
+        'BOARD_KERNEL_SEPARATED_DTBO': 'separate DTBO partition support',
+        'BOARD_BOOTIMG_HEADER_VERSION': 'boot image header version',
+        'TARGET_KERNEL_SOURCE': 'kernel source path',
+        'TARGET_KERNEL_CONFIG': 'kernel defconfig',
+        'BOARD_FLASH_BLOCK_SIZE': 'flash block size',
+        'BOARD_USES_QCOM_HARDWARE': 'Qualcomm hardware flag',
+    }
+    # Recommended vars (match official sm6150)
+    recommended_vars = {
+        'BOARD_INCLUDE_RECOVERY_DTBO': 'recovery DTBO support',
+        'BOARD_SUPER_PARTITION_BLOCK_DEVICES': 'dynamic partition support',
+        'BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST': 'QTI dynamic partition list (QTI code references this)',
+    }
+    for var, why in required_vars.items():
+        if var not in bc:
+            issues.append(f'missing required: {var} ({why})')
+    for var, why in recommended_vars.items():
+        if var not in bc:
+            issues.append(f'missing recommended: {var} ({why})')
+    chk('C53 required BoardConfig vars (sm6150 on A16)', not issues, '; '.join(issues[:5]))
+
+
+# --- C54: Required PRODUCT_PACKAGES (born from Round 8 sm6150 comparison) ---
+def c54():
+    mk = open(f'{DT}/device.mk', encoding='utf-8', errors='replace').read()
+    issues = []
+    # Critical packages for dynamic partitions on sm6150
+    required_packages = {
+        'fastbootd': 'userspace fastboot — required for flashing dynamic partitions',
+        'android.hardware.thermal-service.qti': 'thermal HAL — without it, device may overheat',
+    }
+    for pkg, why in required_packages.items():
+        if pkg not in mk:
+            issues.append(f'missing: {pkg} ({why})')
+    chk('C54 required PRODUCT_PACKAGES (sm6150 dynamic partitions)', not issues, '; '.join(issues[:5]))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1417,7 +1541,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

@@ -1182,11 +1182,12 @@ def c50():
     if re.search(r'^SELINUX_IGNORE_NEVERALLOWS\s*:=\s*true', bc, re.M):
         issues.append('SELINUX_IGNORE_NEVERALLOWS — masks real violations')
 
-    # 5. Dynamic partitions: must be present for this hardware
-    if 'BOARD_SUPER_PARTITION_BLOCK_DEVICES' not in bc:
-        issues.append('no dynamic partition config (hardware requires super partition)')
-    if 'logical' not in open(f'{DT}/rootdir/etc/fstab.qcom', encoding='utf-8', errors='replace').read():
-        issues.append('fstab lacks logical partition entries')
+    # 5. Partition topology: this device's GPT is PHYSICAL (no super — GPT census,
+    #    firmware-images-inventory.md §3; stock fstab mounts physical by-name paths).
+    #    Retrofit-dynamic config would be UNBOOTABLE here. Topology consistency
+    #    between BoardConfig and fstab is enforced by C31.
+    if 'BOARD_SUPER_PARTITION_BLOCK_DEVICES' in bc:
+        issues.append('retrofit-dynamic config on a physical-GPT device (unbootable — see C31)')
 
     # 6. AVB: flags 3 is dev mode (acceptable but noted)
     if '--flags 3' in bc:

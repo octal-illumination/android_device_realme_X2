@@ -1452,15 +1452,15 @@ vendor/lib/vendor.qti.hardware.wifidisplaysession@1.0.so;MODULE_SUFFIX=_vendor|c
 vendor/lib/vendor.qti.hardware.wifidisplaysessionl@1.0-halimpl.so|fefea0a3279f850e562cfaaf4fe3b24af1dd3994
 
 # C23 verified dependency resolution (2026-10-24) — caf-repo-filtered
-system_ext/lib64/android.hidl.base@1.0.so
+# [C14-removed] system_ext/lib64/android.hidl.base@1.0.so  (base provides the interface; our system_ext copy redundant — cross-partition name pair)
 vendor/lib64/com.dsi.ant@1.0.so
 vendor/lib64/libWaterMark.so
 # [C14-removed] vendor/lib64/libavservices_minijail.so  (base builds from source — partition collision)
 vendor/lib64/libbluetooth_audio_session.so
 vendor/lib64/libcld80211.so
-vendor/lib64/libcodec2_vndk.so
+# [C14-removed] vendor/lib64/libcodec2_vndk.so  (base builds from source — partition collision)
 vendor/lib64/libcom.oppo.calidatacontainer.so
-vendor/lib64/libdrm.so
+# [C14-removed] vendor/lib64/libdrm.so  (base builds from source — partition collision)
 vendor/lib64/libeffects.so
 vendor/lib64/libgps.utils.so
 vendor/lib64/libjson.so

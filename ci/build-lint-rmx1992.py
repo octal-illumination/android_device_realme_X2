@@ -1327,6 +1327,73 @@ def c54():
     chk('C54 required PRODUCT_PACKAGES (sm6150 dynamic partitions)', not issues, '; '.join(issues[:5]))
 
 
+# --- C55: Permission/Access Control audit (born from Round 9) ---
+# Enumerates every permission boundary and flags dangerous grants.
+# Known-safe Qualcomm patterns are whitelisted (verified against official sm6150).
+def c55():
+    issues = []
+
+    # 1. World-writable device nodes (whitelist: Qualcomm standard GPU/graphics nodes)
+    SAFE_WORLD_WRITABLE = {
+        'kgsl', 'kgsl-3d0', 'kgsl-2d0', 'kgsl-2d1',  # Adreno GPU (official sm6150 uses 0666)
+        'genlock',  # graphics buffer sync
+        'hab',      # hardware access broker
+        'null', 'zero', 'full', 'random', 'urandom',  # standard Android
+        'ashmem', 'binder', 'hw binder',  # Android core
+        'socket',  # various sockets
+        'ion',     # memory allocator
+        'dma_heap',
+    }
+    for i, line in enumerate(open(f'{DT}/rootdir/ueventd.rc', errors='replace'), 1):
+        s = line.strip()
+        if not s or s.startswith('#') or not s.startswith('/'):
+            continue
+        parts = s.split()
+        if len(parts) >= 2:
+            mode_idx = 1 if re.match(r'^0?[0-7]{3,4}$', parts[1]) else (2 if len(parts) > 2 else -1)
+            if mode_idx >= 0 and mode_idx < len(parts):
+                mode = parts[mode_idx]
+                perm = int(mode, 8) if re.match(r'^0?[0-7]{3,4}$', mode) else 0
+                if perm & 0o002:  # world-writable
+                    dev_name = parts[0].split('/')[-1].split('*')[0]
+                    if dev_name not in SAFE_WORLD_WRITABLE and not any(safe in dev_name for safe in SAFE_WORLD_WRITABLE):
+                        issues.append(f'ueventd.rc:{i}: world-writable non-whitelisted: {parts[0]}')
+
+    # 2. Extreme capabilities (whitelist: poweroffhandler SYS_TIME is legitimate)
+    SAFE_CAPS = {'poweroffhandler': {'SYS_TIME'}}  # power-off alarm needs to program RTC
+    for rc in glob.glob(f'{DT}/rootdir/etc/*.rc'):
+        content = open(rc, errors='replace').read()
+        for m in re.finditer(r'^service\s+(\S+)\s+\S+\n((?:\s+.*\n)*)', content, re.M):
+            svc = m.group(1)
+            body = m.group(2)
+            caps = re.findall(r'capabilities\s+(\S+)', body)
+            if caps:
+                cap_list = caps[0].split()
+                allowed = SAFE_CAPS.get(svc, set())
+                extreme = [c for c in cap_list if c in ('SYS_BOOT', 'SYS_MODULE', 'SYS_TIME', 'MKNOD') and c not in allowed]
+                if extreme:
+                    issues.append(f'{os.path.basename(rc)}: {svc} has unwhitelisted extreme caps: {extreme}')
+
+    # 3. privapp-permissions: package names must be present
+    for xml_file in glob.glob(f'{DT}/configs/*permissions*.xml'):
+        try:
+            root = ET.parse(xml_file).getroot()
+            for priv in root.iter('privapp-permissions'):
+                if not priv.get('package'):
+                    issues.append(f'{os.path.basename(xml_file)}: privapp-permissions without package')
+        except Exception:
+            pass
+
+    # 4. Dangerous SELinux patterns (read-only macros like r_dir_file are safe)
+    for te in glob.glob(f'{DT}/sepolicy/vendor/*.te'):
+        content = open(te, errors='replace').read()
+        # untrusted domains gaining access is always dangerous
+        for m in re.finditer(r'allow\s+untrusted_\w+\s+\w+:\w+\s+\{[^}]*\b(create|write|add_name)\b', content):
+            issues.append(f'{os.path.basename(te)}: untrusted domain write access: {m.group()[:50]}')
+
+    chk('C55 permission/access audit', not issues, '; '.join(issues[:5]))
+
+
 # --- C17: proprietary-files.txt entry syntax ---
 def c17():
     bad = []
@@ -1541,7 +1608,7 @@ def c9():
 
 
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

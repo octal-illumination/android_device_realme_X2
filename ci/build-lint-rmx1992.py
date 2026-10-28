@@ -2230,6 +2230,97 @@ def c62():
             f'image="{kid}" include_dtb={inc} prebuilt_dtb_dir={"yes" if pre else "no"} — consistent')
 
 
+# --- C63: every PRODUCT_PACKAGES entry needs a PROVIDER, and single-source claims are surfaced ---
+# Born from the thermal-HAL defect (LL-035): `android.hardware.thermal-service.qti` was in
+# PRODUCT_PACKAGES, provided by NO repo in the sync set, absent from the stock image and absent from
+# our VINTF manifest - and it stayed invisible because ONE cache (base_provided_packages.txt) listed
+# it. Verification had been done against caches, so the cache hid the gap.
+# Verdict model:
+#   FAIL  - an entry has NO support anywhere (not ours, not a verified source, not OEM, not any cache)
+#   INFO  - an entry rests on a SINGLE unverified cache (base_provided_packages.txt) and nothing else;
+#           these are the exact shape thermal had, so they are listed on every run for re-verification.
+def c63():
+    import glob as _glob
+    def load(fn):
+        try:
+            return {l.split()[0] for l in open(f'{ROOT}/roms/common/tools/ref/{fn}')
+                    if l.strip() and not l.startswith('#')}
+        except OSError:
+            return set()
+
+    ours = set()
+    for f in [f'{VND}/Android.bp'] + _glob.glob(f'{DT}/**/*.bp', recursive=True):
+        try:
+            ours |= set(re.findall(r'^\s*name:\s*"([^"]+)"',
+                                   open(f, encoding='utf-8', errors='replace').read(), re.M))
+        except OSError:
+            pass
+    for f in _glob.glob(f'{DT}/**/*.mk', recursive=True):
+        try:
+            src = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        ours |= set(re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)', src))
+        ours |= set(re.findall(r'LOCAL_PACKAGE_NAME\s*:?=\s*(\S+)', src))
+
+    srcmods = set()
+    for f in _glob.glob(f'{ROOT}/roms/common/tools/ref/sources/*'):
+        if not os.path.isfile(f) or f.endswith('.json'):
+            continue
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        srcmods |= set(re.findall(r'name:\s*"([^"]+)"', t))
+        srcmods |= set(re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)', t))
+
+    oem = {x[:-3] for x in (load('oem_system_libraries.txt') | load('oem_vendor_libraries.txt')
+                            | load('oem_apex_libraries.txt')) if x.endswith('.so')}
+    core = load('base_core_modules.txt')
+    iface = load('base_interface_modules.txt')
+    uni = load('base_module_universe.txt')
+    caf = load('caf_repo_modules.txt')
+    prov = load('base_provided_packages.txt')
+
+    pkgs = set()
+    for f in _glob.glob(f'{DT}/**/*.mk', recursive=True):
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read().replace('\\\n', ' ')
+        except OSError:
+            continue
+        for m in re.finditer(r'^PRODUCT_PACKAGES\s*(?:\+=|:=|=)(.*)$', t, re.M):
+            pkgs |= set(m.group(1).split('#')[0].split())
+
+    def strip(n):
+        # repeat: 'libcurl.vendor:64' needs TWO suffixes removed, not one
+        for _ in range(4):
+            n2 = re.sub(r'(\.vendor|\.system|\.recovery|:32|:64)$', '', n)
+            if n2 == n:
+                break
+            n = n2
+        return n
+
+    unsupported, single = [], []
+    for p in sorted(pkgs):
+        b = strip(p)
+        if b in ours or b in srcmods or b in oem or b in core or b in iface or b in uni or b in caf:
+            continue
+        if b in prov:
+            single.append(p)
+        else:
+            unsupported.append(p)
+
+    chk('C63 PRODUCT_PACKAGES have a provider', not unsupported,
+        (f'{len(unsupported)} entr(y/ies) have NO provider in any source, OEM inventory or cache: '
+         + ', '.join(unsupported[:8])) if unsupported
+        else f'all {len(pkgs)} entries resolve (ours/sources/OEM/core/interface/universe/caf)')
+    if single:
+        info('C63 entries resting on ONE unverified cache (base_provided_packages.txt)',
+             f'{len(single)}: ' + ', '.join(single) +
+             ' — this is the exact shape the thermal-HAL defect had; re-verify before trusting')
+    return unsupported
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -2251,7 +2342,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

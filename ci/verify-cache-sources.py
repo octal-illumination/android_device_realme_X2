@@ -37,6 +37,10 @@ PROJECTS = {
         ('LineageOS/android_hardware_qcom_media', 'lineage-23.2-caf-sm8150'),
         ('LineageOS/android_hardware_qcom_display', 'lineage-23.2-caf-sm8150'),
     ],
+    'nxp': [
+        ('LineageOS/android_hardware_nxp_nfc', 'lineage-23.2'),
+        ('LineageOS/android_hardware_nxp_secure_element', 'lineage-23.2'),
+    ],
     'qti_display': [
         ('LineageOS/android_vendor_qcom_opensource_display', 'lineage-23.2'),
         ('LineageOS/android_vendor_qcom_opensource_display-commonsys', 'lineage-23.2'),

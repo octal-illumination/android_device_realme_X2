@@ -54,8 +54,8 @@ odm/lib/rfsa/adsp/libsnpe_dsp_v66_domains_v2_skel.so
 vendor/lib/rfsa/adsp/capi_v2_aptX_CLHDADV_Encoder.so
 vendor/lib/rfsa/adsp/capi_v2_dap_cpdp.so
 vendor/lib/rfsa/adsp/libVDHexagonSuperPhoto_skel.so
-vendor/lib/rfsa/adsp/libarcsoft_dualcam_refocus_skel.so
-vendor/lib/rfsa/adsp/libsnpe_dsp_v65_domains_v2_skel.so
+vendor/lib/rfsa/adsp/libarcsoft_dualcam_refocus_skel.so;MODULE_SUFFIX=_vendor
+vendor/lib/rfsa/adsp/libsnpe_dsp_v65_domains_v2_skel.so;MODULE_SUFFIX=_vendor
 
 # ADSP Modules - from LA.UM.9.1.r1-11500.02-SMxxx0.QSSI12.0
 system_ext/lib/rfsa/adsp/libdsp_streamer_qvrcam_receiver.so|80f64fd69eb65fa797abf45316c78cdd58a17b96
@@ -225,7 +225,7 @@ vendor/lib64/libsoc_helper.so
 vendor/lib64/libsoc_helper_jni.so
 vendor/lib64/libsubsystem_control.so
 vendor/lib64/libtzdrmgenprov.so
-vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so
+vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so;MODULE_SUFFIX=_vendor
 
 # Camera-arcsoft
 odm/lib64/libarcsoft_beautyshot.so
@@ -376,6 +376,9 @@ odm/lib64/libc++_shared.so
 odm/lib64/libcdm_metrics_protos.so
 odm/lib64/libcdm_protos.so
 odm/lib64/libdav1d.so.4
+odm/lib64/libavutil.so
+odm/lib64/libavcodec.so;DISABLE_DEPS
+odm/lib64/libavformat.so
 odm/lib64/libffmpeg_utils.so
 odm/lib64/libhta.so
 odm/lib64/libhwconfigurationutil.so
@@ -428,11 +431,11 @@ vendor/lib64/libOPLUS_aisd.so
 vendor/lib64/libOPPORectify.so
 vendor/lib64/libSEC.HybridHDR.so
 vendor/lib64/libSonyIMX471RmscLibrary.so
-vendor/lib64/libVDDualCameraBlurlessAPI.so
+vendor/lib64/libVDDualCameraBlurlessAPI.so;MODULE_SUFFIX=_vendor
 vendor/lib64/libVDPostureDetection.so
 vendor/lib64/libcamera_nn_stub.so
 vendor/lib64/libcom.qti.chinodeutils.so
-vendor/lib64/libmpbase.so
+vendor/lib64/libmpbase.so;MODULE_SUFFIX=_vendor
 vendor/lib64/libocam_common.so
 vendor/lib64/libsns_fastRPC_util.so
 vendor/lib64/libswregistrationalgo.so
@@ -549,7 +552,7 @@ system_ext/lib64/vendor.qti.hardware.cvp@1.0.so|ac68aa76d1b4f310f4cbc03f9a90eb0f
 vendor/lib64/libcvp.so|08b4c2b43b8f362d17c4f1becd43eae12e07ec4f
 vendor/lib64/libcvp_common.so|0c19503711057ef3fbf4fba771a310b29518bcda
 vendor/lib64/libcvp_stub.so|fb966906a26400862f65f84a30db7cb000b0291a
-vendor/lib64/vendor.qti.hardware.cvp@1.0.so|64176b1c9de2be09d0ff841006027ef89cd1cec4
+vendor/lib64/vendor.qti.hardware.cvp@1.0.so;MODULE_SUFFIX=_vendor|64176b1c9de2be09d0ff841006027ef89cd1cec4
 
 # Display calibration data
 vendor/etc/qdcm_calib_data_oppo19031samsung_AMS655LSI60_1080_2400_cmd_mode_dsi_panel.xml
@@ -583,7 +586,7 @@ system_ext/lib64/vendor.qti.diaghal@1.0.so|1ac2da1470f3e94ec339c3860ddf617b86d65
 system_ext/priv-app/dpmserviceapp/dpmserviceapp.apk|74ec0d8e2ef3d7e3b0a730da9b97237921778ac4
 vendor/bin/dpmQmiMgr|61a421804559b0e461439c19088acc01b871982a
 vendor/etc/init/dpmQmiMgr.rc|1538743661a5c48c15cd105beaad20f72953885a
-vendor/lib64/com.qualcomm.qti.dpm.api@1.0.so|d9f1aa7f93b928f42499d613d20ccbc60f279097
+vendor/lib64/com.qualcomm.qti.dpm.api@1.0.so;MODULE_SUFFIX=_vendor|d9f1aa7f93b928f42499d613d20ccbc60f279097
 vendor/lib64/libdpmqmihal.so|41eb89e66ba065c43a5eb79cd3c72cef0ee167aa
 
 # DRM - from Redmi/lmi/lmi:11/RKQ1.200826.002/20.10.19:user/release-keys
@@ -640,7 +643,7 @@ system_ext/lib64/libfm-hci.so|66ccf3fc817cf744871ea4178702359bb8babbd5
 -system_ext/lib64/vendor.qti.hardware.fm@1.0.so|0bfc9d9097698b7cc8cb74721cb971a80f862720
 vendor/lib64/hw/vendor.qti.hardware.fm@1.0-impl.so|5c938c9eb6060bfeac1752b4e6d07101bb2430df
 vendor/lib64/ftm_fm_lib.so|48ef909ec57db51104792db4efecaab888cdc8ea
-vendor/lib64/vendor.qti.hardware.fm@1.0.so|49e99338190dbbe0a5db2be70fa68f24e3fd18fa
+vendor/lib64/vendor.qti.hardware.fm@1.0.so;MODULE_SUFFIX=_vendor|49e99338190dbbe0a5db2be70fa68f24e3fd18fa
 
 # Gatekeeper - from LA.UM.9.1.r1-11500.02-SMxxx0.QSSI12.0
 vendor/bin/hw/android.hardware.gatekeeper@1.0-service-qti|2e33e885b92e413440511049025497945d6b8484
@@ -810,8 +813,8 @@ vendor/bin/npu_launcher|ab20fb0d6c49f2c61e4d094ab06634d2fadd5ffc
 vendor/lib64/libnpu.so|4d2599753d7f5ae830a7432fa2152beb1927e14a
 
 # MM OSAL - from LA.UM.9.1.r1-11500.02-SMxxx0.QSSI12.0
-vendor/lib/libmmosal.so|37febc914b2c706a5df0009cc134e9d80690aec0
-vendor/lib64/libmmosal.so|dc6b82fa8d1bd1e7ee0c9dba2ec45b6b032efff0
+vendor/lib/libmmosal.so;MODULE_SUFFIX=_vendor|37febc914b2c706a5df0009cc134e9d80690aec0
+vendor/lib64/libmmosal.so;MODULE_SUFFIX=_vendor|dc6b82fa8d1bd1e7ee0c9dba2ec45b6b032efff0
 
 # Media - from LA.UM.9.1.r1-11500.02-SMxxx0.QSSI12.0
 system_ext/lib/libmmosal.so|e29bdf82903e2293dc3ee74a2b9d69a7f1df25dc
@@ -1167,7 +1170,7 @@ vendor/lib64/vendor.qti.ims.rcsconfig@1.1.so
 vendor/lib64/vendor.qti.ims.rcsconfig@2.0.so
 vendor/lib64/vendor.qti.ims.rcsconfig@2.1.so
 vendor/lib64/vendor.qti.imsrtpservice@3.0-service-Impl.so
-vendor/lib64/vendor.qti.imsrtpservice@3.0.so
+vendor/lib64/vendor.qti.imsrtpservice@3.0.so;MODULE_SUFFIX=_vendor
 
 # Samsung Display
 odm/etc/samsung1024_ams641rw16_eyeprotect_data.xml
@@ -1445,5 +1448,78 @@ vendor/lib/libwfduibcsinkinterface_proprietary.so|0fef474153602ed2336c6d23e90694
 vendor/lib/libwfduibcsrc_proprietary.so|11f1152f0da71d978a17a66a883c65763dd08c1e
 vendor/lib/libwfduibcsrcinterface_proprietary.so|bfd97b6d662657234774a3c9c87f8a0670f92dd9
 vendor/lib/libwfdutils_proprietary.so|3ca0bd1c8c73c0cdeaf643cb940befba5c48267e
-vendor/lib/vendor.qti.hardware.wifidisplaysession@1.0.so|c08e1803c3089ee5da37b0a56eb9c2bdf9aeb4b2
+vendor/lib/vendor.qti.hardware.wifidisplaysession@1.0.so;MODULE_SUFFIX=_vendor|c08e1803c3089ee5da37b0a56eb9c2bdf9aeb4b2
 vendor/lib/vendor.qti.hardware.wifidisplaysessionl@1.0-halimpl.so|fefea0a3279f850e562cfaaf4fe3b24af1dd3994
+
+# C23 verified dependency resolution (2026-10-24) — caf-repo-filtered
+# [C14-removed] system_ext/lib64/android.hidl.base@1.0.so  (base provides the interface; our system_ext copy redundant — cross-partition name pair)
+vendor/lib64/com.dsi.ant@1.0.so
+vendor/lib64/libWaterMark.so
+# [C14-removed] vendor/lib64/libavservices_minijail.so  (base builds from source — partition collision)
+vendor/lib64/libbluetooth_audio_session.so
+vendor/lib64/libcld80211.so
+# [C14-removed] vendor/lib64/libcodec2_vndk.so  (base builds from source — partition collision)
+vendor/lib64/libcom.oppo.calidatacontainer.so
+# [C14-removed] vendor/lib64/libdrm.so  (base builds from source — partition collision)
+vendor/lib64/libeffects.so
+vendor/lib64/libgps.utils.so
+vendor/lib64/libjson.so
+vendor/lib64/libloc_core.so
+vendor/lib64/liblocation_api.so
+vendor/lib64/liboppo_platform_hwi.so
+vendor/lib64/libril.so
+vendor/lib64/libsensorndkbridge.so
+vendor/lib64/libtinycompress.so
+vendor/lib64/libtinyxml.so
+vendor/lib/libwfdaac_vendor.so
+vendor/lib64/libwpa_client.so
+odm/lib64/oplus_btaudio_offload_if.so
+vendor/lib64/vendor.display.config@1.0.so
+vendor/lib64/vendor.display.config@2.0.so
+odm/lib64/vendor.oplus.hardware.biometrics.fingerprint@2.1.so
+vendor/lib64/vendor.oplus.hardware.cammidasservice@1.0.so
+vendor/lib64/vendor.qti.hardware.improvetouch.touchcompanion@1.0.so
+vendor/lib64/vendor.qti.hardware.qteeconnector@1.0.so
+vendor/lib64/vendor.qti.hardware.sigma_miracast@1.0.so
+vendor/lib64/vendor.qti.hardware.trustedui@1.0.so
+vendor/lib64/libcamera_core_hwi.so
+# [C14-removed] vendor/lib64/libeffectsconfig.so  (base builds from source — partition collision)
+vendor/lib64/librilutils.so
+# [C14-removed] vendor/lib64/libstagefright_bufferpool@2.0.1.so  (base builds from source — partition collision)
+odm/lib64/vendor.oplus.hardware.bluetooth_audio@1.0.so
+
+# Option A' blob-first additions (2026-10-28 audit): these were previously expected from
+# caf-sm8150 source repos that were never synced (RjTangpos manifest-Alpha leftovers).
+# Shipped as verified F.26 stock blobs instead — device-matched, no foreign source code.
+# (No sm6150/sm6250 caf branches have ever existed in LineageOS; the .system display
+# variants and the AIDL power/thermal -qti services were dropped from device.mk.)
+
+# Audio - generic SoC-independent wrappers
+vendor/lib/hw/audio.usb.default.so
+vendor/lib64/hw/audio.usb.default.so
+vendor/lib/hw/audio.r_submix.default.so
+vendor/lib64/hw/audio.r_submix.default.so
+vendor/lib/hw/audio.bluetooth.default.so
+vendor/lib64/hw/audio.bluetooth.default.so
+
+# Display - qcom config utilities
+vendor/lib64/libdisplayconfig.qti.so
+vendor/lib64/libqdMetaData.so
+vendor/lib64/libqti_vndfwk_detect.so
+vendor/lib64/libvndfwk_detect_jni.qti.so
+
+# IPA (data accelerator) - stock services + config
+vendor/bin/ipacm
+vendor/bin/ipacm-diag
+vendor/etc/IPACM_cfg.xml
+vendor/etc/init/ipacm.rc
+vendor/etc/init/ipacm-diag.rc
+vendor/etc/init/ipa_fws.rc
+
+# Power - HIDL@1.3 server (manifest declares android.hardware.power@1.3 passthrough)
+vendor/bin/hw/android.hardware.power-service
+vendor/etc/init/android.hardware.power-service.rc
+
+# Thermal - HIDL@2.0 service (stock; AIDL -qti leftover dropped from device.mk)
+vendor/bin/hw/android.hardware.thermal@2.0-service.qti
+vendor/etc/init/android.hardware.thermal@2.0-service.qti.rc

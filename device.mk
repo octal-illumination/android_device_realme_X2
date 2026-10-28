@@ -63,8 +63,10 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/com.android.nfc_extras.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.nfc_extras.xml
 
 # ANT+
+# X2-Fix (2026-10-21): dead PRODUCT_PACKAGES refs removed in prior commits: AntHalService-Soong,
+# libOmxAacEnc, libOmxAmrEnc, libOmxEvrcEnc, libOmxQcelp13Enc, libOmxG711Enc, libmm-omxcore
+# (no source in vanilla 23.2 sync set; F.26 ships only *Dec decoder blobs; official sm8150 omits them).
 PRODUCT_PACKAGES += \
-    AntHalService-Soong \
     com.dsi.ant@1.0.vendor
 
 # Audio
@@ -138,11 +140,9 @@ PRODUCT_PACKAGES += \
     gralloc.qcom \
     hwcomposer.qcom \
     libqdMetaData \
-    libqdMetaData.system \
     libtinyxml \
     libvulkan \
     libdisplayconfig.qti \
-    libdisplayconfig.system.qti \
     vendor.display.config@1.14.vendor \
     vendor.display.config@2.0.vendor \
     vendor.qti.hardware.display.mapper@1.1.vendor \
@@ -267,18 +267,11 @@ PRODUCT_PACKAGES += \
     libc2dcolorconvert \
     libcodec2_hidl@1.0.vendor \
     libcodec2_vndk.vendor \
-    libmm-omxcore \
-    libOmxAacEnc \
-    libOmxAmrEnc \
     libOmxCore \
-    libOmxEvrcEnc \
-    libOmxG711Enc \
-    libOmxQcelp13Enc \
     libOmxVdec \
     libOmxVenc \
     libstagefrighthw \
     libminijail \
-    libavservices_minijail \
     libavservices_minijail.vendor \
     libstagefright_softomx.vendor
 
@@ -326,7 +319,7 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     vendor.qti.hardware.perf@2.2.vendor
 
-PPRODUCT_COPY_FILES += \
+PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/perf/commonresourceconfigs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/commonresourceconfigs.xml \
     $(LOCAL_PATH)/configs/perf/perfboostsconfig.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/perfboostsconfig.xml \
     $(LOCAL_PATH)/configs/perf/perfconfigstore.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/perfconfigstore.xml \
@@ -334,10 +327,11 @@ PPRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/perf/targetconfig.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/targetconfig.xml \
     $(LOCAL_PATH)/configs/perf/targetresourceconfigs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/targetresourceconfigs.xml
 
-# Power
+# Power — HIDL@1.3 (manifest declares android.hardware.power@1.3 passthrough), served by the
+# stock blob vendor/bin/hw/android.hardware.power-service (vendor list, Option A′ 2026-10-28).
+# The AIDL android.hardware.power-service-qti was a never-synced source leftover (no repo).
 PRODUCT_PACKAGES += \
-    android.hardware.power@1.3.vendor \
-    android.hardware.power-service-qti
+    android.hardware.power@1.3.vendor
 
 # Protobuf
 PRODUCT_PACKAGES += \
@@ -369,7 +363,6 @@ PRODUCT_PACKAGES += \
     android.hardware.radio.config@1.2.vendor \
     android.hardware.secure_element@1.2.vendor \
     android.hardware.radio.deprecated@1.0.vendor \
-    libjson \
     librmnetctl \
     libxml2 \
     libprotobuf-cpp-full
@@ -432,7 +425,8 @@ $(call soong_config_set,surfaceflinger,udfps_lib,//$(LOCAL_PATH):libudfps_extens
 
 # USB
 PRODUCT_PACKAGES += \
-    android.hardware.usb@1.0-service
+    android.hardware.usb@1.0-service \
+    fastbootd
 
 # Vendor Init
 $(call soong_config_set,libinit,vendor_init_lib,//$(LOCAL_PATH):libinit_x2)
@@ -440,6 +434,10 @@ $(call soong_config_set,libinit,vendor_init_lib,//$(LOCAL_PATH):libinit_x2)
 # Vendor service manager
 PRODUCT_PACKAGES += \
     vndservicemanager
+
+# Thermal — served by the stock HIDL@2.0 service shipped as a blob (vendor list,
+# Option A′ 2026-10-28). The AIDL android.hardware.thermal-service.qti was a never-synced
+# source leftover (no repo); thermal-engine continues to run from the vendor list.
 
 # Vibrator
 $(call inherit-product, vendor/qcom/opensource/vibrator/vibrator-vendor-product.mk)

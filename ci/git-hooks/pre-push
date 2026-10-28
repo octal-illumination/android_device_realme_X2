@@ -1,0 +1,4 @@
+#!/bin/bash
+# Note: This code is purely AI-generated.
+# X2 build-line guard — see roms/common/tools/git-hooks/_guard.sh
+exec "$(dirname "$0")/_guard.sh" "$@"

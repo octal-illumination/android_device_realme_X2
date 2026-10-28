@@ -46,6 +46,13 @@ lib_fixups: lib_fixups_user_type = {
     **lib_fixups,
     (
     ): lib_fixup_vendor_suffix,
+    # libsigmautils is DT_NEEDED by libmiracastsystem but exists in NEITHER the F.26
+    # stock images NOR any repo in the LOS 23.2 sync set (verified 2026-10-28 against
+    # android_hardware_qcom_display, android_vendor_qcom_opensource_display,
+    # -display-commonsys, -display-commonsys-intf, -interfaces). extract-utils emits it as
+    # a shared_libs entry, which Soong rejects as an undefined module. Dropped so the
+    # build dependency is not generated; the blob's own DT_NEEDED is unchanged.
+    'libsigmautils': lib_fixup_remove,
 }
 
 blob_fixups: blob_fixups_user_type = {

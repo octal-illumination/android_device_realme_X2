@@ -1,0 +1,3 @@
+fastbootd                                                FOUND LineageOS/android_system_core@lineage-23.2:fastboot/Android.bp
+libloc_net_iface                                         ABSENT (coverage 100%, 3 repos)
+fastbootd                                                FOUND LineageOS/android_system_core@lineage-23.2:fastboot/Android.bp

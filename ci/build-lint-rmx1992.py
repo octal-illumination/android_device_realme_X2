@@ -285,12 +285,18 @@ def c14():
 # (a) one of our own prebuilt modules, (b) a known base system library,
 # or (c) a blob that EXISTS in the F.26 dump but was never listed — the actionable case.
 BASE_LIBS = {
+    # NOTE (2026-10-28): entries removed from this hand-written set unless corroborated by OEM
+    # data or a fetched build file, or already shipped by our own vendor repo. Removed: the
+    # 'lib c++' typo, and libjson/libtinyxml/libwpa_client/libprotobuf-cpp-lite-3.9.1 (we ship
+    # them), libqservice/libqdutils/libdisplayconfig.qti (verified providers in the caf sm8150
+    # display + vendor/qcom/opensource/display repos - see SPECIFICATION LL-030/LL-032), and
+    # libqti_vndfwk_detect (no provider anywhere -> now shipped as a blob instead).
     'libc', 'libm', 'libdl', 'liblog', 'libutils', 'libcutils', 'libbase',
-    'lib c++', 'libc++', 'libstdc++', 'libz', 'libcrypto', 'libssl',
+    'libc++', 'libstdc++', 'libz', 'libcrypto', 'libssl',
     'libhidlbase', 'libhidltransport', 'libhwbinder', 'libvndksupport',
     'libbinder', 'libbinder_ndk', 'libgui', 'libui', 'libsurfaceflinger',
     'libcamera_metadata', 'libcamera2ndk', 'libjpeg', 'libpng', 'libexif',
-    'libprotobuf-cpp-lite', 'libprotobuf-cpp-full', 'libprotobuf-cpp-lite-3.9.1',
+    'libprotobuf-cpp-lite', 'libprotobuf-cpp-full',
     'libsqlite', 'libxml2', 'libexpat', 'libicu', 'libssl', 'libcurl',
     'libhardware', 'libhardware_legacy', 'libsync', 'libpagemap',
     'libprocessgroup', 'libselinux', 'libminijail', 'libavservices_minijail',
@@ -298,14 +304,14 @@ BASE_LIBS = {
     'libaaudio', 'libaudioclient', 'libaudiofoundation',
     'libbinder_rtbs', 'libc++.so', 'libc.so',
     'libchrome', 'libchrome.vendor', 'libcrypto-v33',
-    'libjson', 'libjsoncpp.vendor', 'libtinyxml', 'libtinyxml2',
-    'libnl', 'libwpa_client', 'libwifi-hal-ctrl', 'libwifi-hal-qcom',
+    'libjsoncpp.vendor', 'libtinyxml2',
+    'libnl', 'libwifi-hal-ctrl', 'libwifi-hal-qcom',
     'libvulkan', 'libEGL', 'libGLESv2', 'libGLESv1_CM',
     'libnetutils', 'libnetd_client', 'libndk',
     'libpower', 'libperfmgr', 'libtombstoned_client',
-    'libqservice', 'libqdutils', 'libqservice.vendor',
-    'libdisplayconfig.qti', 'libdisplayconfig.system.qti',
-    'libqti_vndfwk_detect', 'libqti_vndfwk_detect.vendor',
+    'libqservice.vendor',
+    'libdisplayconfig.system.qti',
+    'libqti_vndfwk_detect.vendor',
     'libgrallocusage', 'libgralloctypes',
     'libfmq', 'libhardware_legacy', 'libhealthshim',
 }
@@ -2125,7 +2131,9 @@ def c60():
 #   "module X depends on undefined module Y"
 # That class is invisible to every other rule here: C23/C25/C60 check RUNTIME sonames, C14 checks
 # name collisions, C6/C9 check the blob list and PRODUCT_PACKAGES. The defect that motivated this
-# rule - 21 prebuilts linking "libprotobuf-cpp-*-3.9.1-vendorcompat", a module removed after A13 -
+# rule - 21 prebuilts linking "libprotobuf-cpp-*-3.9.1-vendorcompat"; those modules DO exist
+# (prebuilts/misc/protobuf_vendorcompat) but LineageOS PRUNES that dir via PRODUCT_SOURCE_ROOT_DIRS,
+# so they are unbuildable - LL-021/LL-030. The 21 refs were rewritten to our own shipped modules -
 # was found only by manual investigation of C60 output.
 # Resolution order: modules we define -> base module caches -> curated core-module list.
 def c61():

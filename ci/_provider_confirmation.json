@@ -1,0 +1,205 @@
+{
+ "confirmed": [
+  [
+   "android.hardware.audio.service",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "audio/common/all-versions/default/service/Android.bp"
+  ],
+  [
+   "android.hardware.bluetooth.audio-impl",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "bluetooth/audio/aidl/default/Android.bp"
+  ],
+  [
+   "android.hardware.health@2.1-impl",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "health/2.1/default/Android.bp"
+  ],
+  [
+   "android.hardware.health@2.1-service",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "health/2.1/default/Android.bp"
+  ],
+  [
+   "android.hardware.neuralnetworks@1.3",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "neuralnetworks/1.3/Android.bp"
+  ],
+  [
+   "android.hardware.nfc@1.2",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "nfc/1.2/Android.bp"
+  ],
+  [
+   "android.hardware.power-service-qti",
+   "LineageOS/android_vendor_qcom_opensource_power",
+   "lineage-23.2",
+   "Android.bp"
+  ],
+  [
+   "android.hardware.radio.config@1.2",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "radio/config/1.2/Android.bp"
+  ],
+  [
+   "android.hardware.radio@1.5",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "radio/1.5/Android.bp"
+  ],
+  [
+   "android.hardware.secure_element@1.2",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "secure_element/1.2/Android.bp"
+  ],
+  [
+   "disable_configstore",
+   "LineageOS/android_hardware_interfaces",
+   "lineage-23.2",
+   "configstore/1.1/default/Android.bp"
+  ],
+  [
+   "hostapd",
+   "LineageOS/android_external_wpa_supplicant_8",
+   "lineage-23.2",
+   "wpa_supplicant/wpa_supplicant/Android.bp"
+  ],
+  [
+   "ims_ext_common.xml",
+   "LineageOS/android_vendor_codeaurora_telephony",
+   "lineage-23.2",
+   "ims/ims-ext-common/Android.bp"
+  ],
+  [
+   "libstdc++_vendor",
+   "LineageOS/android_bionic",
+   "lineage-23.2",
+   "libc/Android.bp"
+  ],
+  [
+   "qti-telephony-utils",
+   "LineageOS/android_vendor_codeaurora_telephony",
+   "lineage-23.2",
+   "qti-utils/Android.bp"
+  ],
+  [
+   "qti_telephony_hidl_wrapper.xml",
+   "LineageOS/android_vendor_codeaurora_telephony",
+   "lineage-23.2",
+   "qti-hidl-wrapper/Android.bp"
+  ],
+  [
+   "qti_telephony_utils.xml",
+   "LineageOS/android_vendor_codeaurora_telephony",
+   "lineage-23.2",
+   "qti-utils/Android.bp"
+  ],
+  [
+   "tinymix",
+   "LineageOS/android_external_tinyalsa",
+   "lineage-23.2",
+   "Android.bp"
+  ],
+  [
+   "wpa_supplicant",
+   "LineageOS/android_external_wpa_supplicant_8",
+   "lineage-23.2",
+   "wpa_supplicant/wpa_supplicant/Android.bp"
+  ]
+ ],
+ "unresolved": [
+  [
+   "IPACM_cfg.xml",
+   "OdSazib/device_xiaomi_sdm660-common",
+   "repo not in our manifest"
+  ],
+  [
+   "SecureElement",
+   "yuchuangu85/Android-system-apps",
+   "repo not in our manifest"
+  ],
+  [
+   "Tag",
+   "rickdynasty/Aosp11",
+   "repo not in our manifest"
+  ],
+  [
+   "android.hardware.usb@1.0-service",
+   "DerpFest-AOSP/hardware_interfaces",
+   "repo not in our manifest"
+  ],
+  [
+   "android.hardware.wifi-service",
+   "opencecs/tebox",
+   "repo not in our manifest"
+  ],
+  [
+   "android.hidl.manager@1.0",
+   "Alberto97/android_device_motorola_addison",
+   "repo not in our manifest"
+  ],
+  [
+   "com.android.nfc_extras",
+   "AOSPA/android_frameworks_base-uvite",
+   "repo not in our manifest"
+  ],
+  [
+   "fastbootd",
+   "VPBox/Dev",
+   "repo not in our manifest"
+  ],
+  [
+   "ims-ext-common",
+   "mweinbach/lineage-os-xiaomi17u",
+   "repo not in our manifest"
+  ],
+  [
+   "ipacm",
+   "OdSazib/device_xiaomi_sdm660-common",
+   "repo not in our manifest"
+  ],
+  [
+   "libcrypto-v33",
+   "samsungexynos9810/device_samsung_exynos9810-common-V2",
+   "repo not in our manifest"
+  ],
+  [
+   "liblocdiagiface",
+   "tadiphone-caf/vendor_qcom_proprietary",
+   "repo not in our manifest"
+  ],
+  [
+   "qti-telephony-hidl-wrapper",
+   "mweinbach/lineage-os-xiaomi17u",
+   "repo not in our manifest"
+  ],
+  [
+   "telephony-ext",
+   "TheMuppets/proprietary_vendor_fairphone",
+   "repo not in our manifest"
+  ],
+  [
+   "vendor.qti.hardware.memtrack-service",
+   "Evervolv/android_device_qcom_common",
+   "repo not in our manifest"
+  ],
+  [
+   "vndservicemanager",
+   "VPBox/Dev",
+   "repo not in our manifest"
+  ],
+  [
+   "wpa_supplicant.conf",
+   "STMicroelectronics/device-stm-eval",
+   "repo not in our manifest"
+  ]
+ ]
+}

@@ -38,13 +38,83 @@ def warn(name, detail):
 
 
 # --- C0: branch consistency (the lint validates the WORKING TREE — both repos must sit on the same target line) ---
+BUILD_TARGET_FILE = os.environ.get('X2_LINT_BUILD_TARGET_FILE') or f'{ROOT}/roms/BUILD_TARGET'
+KERNEL = os.environ.get('X2_LINT_KERNEL') or f'{ROOT}/roms/common/kernel/sm6150'
+MANIFESTS = os.environ.get('X2_LINT_MANIFESTS') or f'{ROOT}/roms/lineage/manifests'
+
+
+def declared_build_line():
+    """Read the active LineageOS line from roms/BUILD_TARGET (single source of truth)."""
+    try:
+        for line in open(BUILD_TARGET_FILE, encoding='utf-8', errors='replace'):
+            line = re.sub(r'<!--.*?-->', '', line)
+            line = line.split('#')[0].strip()
+            if line:
+                return line
+    except OSError:
+        return None
+    return None
+
+
+# --- C0: build-line CONFORMANCE (not mere self-consistency) ---
+# History: the original C0 only compared device-vs-vendor branches, so a tree where BOTH sat on
+# the wrong line (e.g. lineage-24.0 while the bake builds lineage-23.2) passed happily. That is how
+# a fix was committed+pushed to 24.0 and a 12-15h cycle was wasted. C0 now compares every repo
+# against the line declared in roms/BUILD_TARGET, plus the manifests revision pins.
 def c0():
+    if not os.path.isdir(f'{DT}/.git'):
+        print('SKIP  C0 build-line conformance — not a git checkout (snapshot/export mode)')
+        return
+    target = declared_build_line()
+    if not target:
+        chk('C0 build-line conformance', False,
+            f'no declared build line — {BUILD_TARGET_FILE} is missing or has no value')
+        return
+
     def branch_of(path):
-        r = subprocess.run(['git', '-C', path, 'branch', '--show-current'], capture_output=True, text=True)
+        if not os.path.isdir(path):
+            return '(absent)'
+        r = subprocess.run(['git', '-C', path, 'branch', '--show-current'],
+                           capture_output=True, text=True)
         return r.stdout.strip() or '(detached)'
-    bd, bv = branch_of(DT), branch_of(VND)
-    chk('C0 branch consistency', bd == bv and bd != '(detached)',
-        f'device@{bd} vs vendor@{bv} — checkout the TARGET line in both before linting/submission')
+
+    repos = {'device': DT, 'vendor': VND, 'kernel': KERNEL, 'manifests': MANIFESTS}
+    branches = {name: branch_of(p) for name, p in repos.items()}
+    off = {name: b for name, b in branches.items() if b != target}
+    chk('C0 every repo is on the declared build line', not off,
+        (f'declared "{target}" but ' +
+         ', '.join(f'{n}@{b}' for n, b in off.items()) +
+         ' — run: git -C <repo> checkout ' + target) if off
+        else f'device/vendor/kernel/manifests all on {target}')
+
+    # manifests must PIN the same line for the three projects we own
+    bad_pins = []
+    if os.path.isdir(MANIFESTS):
+        for xml_path in glob.glob(f'{MANIFESTS}/*.xml'):
+            try:
+                tree = ET.parse(xml_path)
+            except ET.ParseError:
+                continue
+            for proj in tree.getroot().findall('project'):
+                name = proj.get('name', '')
+                if not name.startswith('android_') or 'realme' not in name.lower() and 'X2' not in name:
+                    continue
+                rev = proj.get('revision')
+                if rev and rev != target:
+                    bad_pins.append(f'{os.path.basename(xml_path)}:{name}@{rev}')
+    chk('C0 manifests pin the declared line', not bad_pins,
+        ', '.join(bad_pins[:5]) if bad_pins else f'pins match {target}')
+
+    dirty = []
+    for name, p in repos.items():
+        if not os.path.isdir(p):
+            continue
+        r = subprocess.run(['git', '-C', p, 'status', '--porcelain'], capture_output=True, text=True)
+        if r.stdout.strip():
+            dirty.append(name)
+    if dirty:
+        warn('C0 uncommitted changes before submission', ', '.join(dirty) +
+             ' — the bake builds what GitHub has, NOT your working tree')
 
 
 # --- C1: BoardConfig 2ND-arch rule (verbatim base table, combo/TARGET_linux-arm.mk @lineage-23.2) ---
@@ -1663,8 +1733,139 @@ def c56():
         f'{len(new_pairs)} undocumented pair(s): ' + ', '.join(sorted(new_pairs)[:5]))
 
 
+# --- C57: module name conflict — cross-repo same-name modules (bake-fatal, not just within-file) ---
+# C2 only checks duplicates WITHIN a single .bp file. This scans the WHOLE layer:
+#   - every module name declared in VND/Android.bp
+#   - every module name declared in DT/**/*.bp
+# Any name appearing in BOTH repos is flagged (WARN) — most are legal same-partition
+# overrides (see C56/device_tree_shared_names.txt), but a name collision across repos is
+# the EXACT condition that triggers Soong's 'partition is different' class. Every WARN
+# here must be either allowlisted (C56) or explicitly verified same-partition, otherwise
+# it is a latent bake-fatal until a bake proves otherwise.
+def c57():
+    ours = set(re.findall(r'^\s*name:\s*"([^"]+)"',
+                          open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read(), re.M))
+    theirs = set()
+    their_sources = {}
+    for bp_path in glob.glob(f'{DT}/**/Android.bp', recursive=True):
+        try:
+            for n in re.findall(r'^\s*name:\s*"([^"]+)"',
+                                open(bp_path, encoding='utf-8', errors='replace').read(), re.M):
+                theirs.add(n)
+                their_sources.setdefault(n, []).append(os.path.relpath(bp_path, ROOT))
+        except OSError:
+            pass
+    conflict = sorted(ours & theirs)
+    allow_path = f'{ROOT}/roms/common/tools/ref/device_tree_shared_names.txt'
+    allowed = set()
+    if os.path.isfile(allow_path):
+        for _line in open(allow_path):
+            _line = _line.strip()
+            if _line and not _line.startswith('#'):
+                allowed.add(_line.split()[0])
+    unallowlisted = [n for n in conflict if n not in allowed]
+    if unallowlisted:
+        for name in unallowlisted[:12]:
+            warn(f'C57 cross-repo module name conflict [{os.path.relpath(f"{VND}/Android.bp", ROOT)} vs DT]',
+                 f'{name!r} defined in VND/Android.bp AND ' + ', '.join(sorted(their_sources[name]))
+                 + f' — verify same partition (C58) or allowlist in device_tree_shared_names.txt')
+
+
+# --- shared Soong module parser (used by C57/C58) ---
+# Partition is derived EXACTLY as Soong derives it: ModuleBase.PartitionTag reads the
+# module's specificity FLAGS only (android/module.go). There is no `partition:` .bp
+# property anywhere in Soong, so any such line in an Android.bp is inert at best and an
+# unknown-property error at worst (C59 guards this).
+def _soong_partition(flags):
+    if flags & {'vendor', 'proprietary', 'soc_specific'}:
+        return 'vendor'          # SocSpecific()  -> vendor/ (config VendorPath()=='vendor')
+    if 'device_specific' in flags:
+        return 'odm'             # DeviceSpecific() -> odm/ (config OdmPath()=='odm')
+    if 'product_specific' in flags:
+        return 'product'
+    if 'system_ext_specific' in flags:
+        return 'system_ext'
+    return 'system'              # platform (incl. vendor_available-only modules)
+
+
+def _soong_modules(path):
+    """Parse top-level Soong modules: returns [{type,name,partition,line}]."""
+    try:
+        lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+    except OSError:
+        return []
+    out, depth, cur = [], 0, None
+    for i, raw in enumerate(lines, 1):
+        line = re.sub(r'//.*$', '', raw)
+        if depth == 0 and cur is None:
+            m = re.match(r'\s*([a-z_][a-z0-9_]*)\s*\{', line)
+            if m:
+                cur = {'type': m.group(1), 'name': None, 'flags': set(), 'line': i}
+        if cur is not None:
+            nm = re.match(r'\s*name:\s*"([^"]+)"', line)
+            if nm and cur['name'] is None:
+                cur['name'] = nm.group(1)
+            fm = re.match(r'\s*([a-z_]+):\s*true\b', line)
+            if fm:
+                cur['flags'].add(fm.group(1))
+        depth += line.count('{') - line.count('}')
+        if cur is not None and depth <= 0:
+            if cur['name']:
+                cur['partition'] = _soong_partition(cur['flags'])
+                out.append(cur)
+            cur, depth = None, 0
+    return out
+
+
+# --- C58: partition consistency — same module name, mismatched Soong partition (bake-fatal) ---
+# Soong's prebuilt-over-source invariant (android/prebuilt.go checkInvariantsForSourceAndPrebuilt)
+# fails the bake with 'partition is different: <src>(name) != <pre>(name)' whenever a same-named
+# prebuilt in the vendor repo and a source module in the device tree resolve to different
+# partition tags. C14 cannot see this: it only scans VND and never reads DT/ interfaces/.
+# Partition model is Soong-exact (see _soong_partition) — specificity flags only.
+def c58():
+    ours = {m['name']: m for m in _soong_modules(f'{VND}/Android.bp')}
+    theirs = {}
+    for bp_path in glob.glob(f'{DT}/**/Android.bp', recursive=True):
+        for m in _soong_modules(bp_path):
+            theirs.setdefault(m['name'], []).append((m, os.path.relpath(bp_path, ROOT)))
+    bad = []
+    for name, om in ours.items():
+        for tm, tpath in theirs.get(name, []):
+            if om['partition'] != tm['partition']:
+                bad.append((name, om['partition'], tm['partition'], tpath))
+    if bad:
+        for name, op, tp, tpath in bad[:10]:
+            chk('C58 prebuilt/source partition agreement', False,
+                f'{name!r}: vendor-repo prebuilt={op} vs device-tree source={tp} ({tpath}) '
+                f'— Soong will abort: "partition is different"')
+    else:
+        shared = [n for n in ours if n in theirs]
+        chk('C58 prebuilt/source partition agreement', True,
+            f'{len(shared)} cross-repo same-name pair(s) agree on partition')
+    return bad
+
+
+# --- C59: `partition:` is NOT a Soong property (silent no-op / unknown-property error) ---
+# PartitionTag is derived from specificity flags; a hand-added `partition: "..."` line changes
+# nothing and gives false assurance that a partition conflict has been fixed.
+def c59():
+    hits = []
+    for bp_path in glob.glob(f'{DT}/**/Android.bp', recursive=True) + [f'{VND}/Android.bp']:
+        try:
+            for i, line in enumerate(open(bp_path, encoding='utf-8', errors='replace'), 1):
+                code = re.sub(r'//.*$', '', line)
+                if re.match(r'\s*partition:\s*"', code):
+                    hits.append((os.path.relpath(bp_path, ROOT), i, code.strip()))
+        except OSError:
+            pass
+    chk('C59 no inert `partition:` property in Android.bp', not hits,
+        '; '.join(f'{p}:{i} {c}' for p, i, c in hits[:6]))
+    return hits
+
+
 def main():
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

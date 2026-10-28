@@ -69,6 +69,18 @@ KERNEL = os.environ.get('X2_LINT_KERNEL') or f'{ROOT}/roms/common/kernel/sm6150'
 MANIFESTS = os.environ.get('X2_LINT_MANIFESTS') or f'{ROOT}/roms/lineage/manifests'
 
 
+def dt_glob(pattern):
+    """Glob the device tree but EXCLUDE tooling (ci/): ci/ref/sources holds FETCHED UPSTREAM files
+    used as verification evidence. They are not part of our device configuration and must never be
+    parsed as if they were (doing so produced bogus C61/C2 failures on 2026-10-29)."""
+    out = []
+    for p in glob.glob(pattern, recursive=True):
+        if '/ci/' in p.replace(os.sep, '/'):
+            continue
+        out.append(p)
+    return out
+
+
 def declared_build_line():
     """Read the active LineageOS line from roms/BUILD_TARGET (single source of truth)."""
     try:
@@ -190,7 +202,7 @@ def bp_names(path):
 
 
 def c2():
-    for bp in [f'{VND}/Android.bp'] + sorted(glob.glob(f'{DT}/**/*.bp', recursive=True)):
+    for bp in [f'{VND}/Android.bp'] + sorted(dt_glob(f'{DT}/**/*.bp')):
         names = bp_names(bp)
         dupes = sorted({n for n in names if names.count(n) > 1})
         chk(f'C2 dup modules [{os.path.relpath(bp, ROOT)}]', not dupes, ', '.join(dupes[:10]))
@@ -229,7 +241,7 @@ BPFMT = os.environ.get('X2_LINT_BPFMT') or f'{ROOT}/roms/common/tools/bin/bpfmt'
 def c5():
     bad = []
     use_bpfmt = os.access(BPFMT, os.X_OK)
-    for bp in [f'{VND}/Android.bp'] + sorted(glob.glob(f'{DT}/**/*.bp', recursive=True)):
+    for bp in [f'{VND}/Android.bp'] + sorted(dt_glob(f'{DT}/**/*.bp')):
         rel = os.path.relpath(bp, ROOT)
         if use_bpfmt:
             r = subprocess.run([BPFMT, '-d', bp], capture_output=True, text=True)
@@ -1728,9 +1740,9 @@ def c9():
                 if '\\' not in line:
                     block = False
     defined = set(bp_names(f'{VND}/Android.bp'))
-    for bp in glob.glob(f'{DT}/**/*.bp', recursive=True):
+    for bp in dt_glob(f'{DT}/**/*.bp'):
         defined |= set(bp_names(bp))
-    for mk in glob.glob(f'{DT}/**/*.mk', recursive=True):
+    for mk in dt_glob(f'{DT}/**/*.mk'):
         defined |= set(re.findall(r'LOCAL_(?:MODULE|PACKAGE_NAME)\s*:=\s*(\S+)', open(mk, errors='replace').read()))
     missing = sorted(pkgs - defined)
     base_pkgs = set()
@@ -2150,14 +2162,14 @@ def c61():
             return set()
 
     ours = set()
-    bp_files = glob.glob(f'{VND}/**/*.bp', recursive=True) + glob.glob(f'{DT}/**/*.bp', recursive=True)
+    bp_files = glob.glob(f'{VND}/**/*.bp', recursive=True) + dt_glob(f'{DT}/**/*.bp')
     for f in bp_files:
         try:
             ours |= set(re.findall(r'^\s*name:\s*"([^"]+)"', open(f, encoding='utf-8',
                                                                   errors='replace').read(), re.M))
         except OSError:
             pass
-    for f in glob.glob(f'{DT}/**/*.mk', recursive=True) + glob.glob(f'{VND}/*.mk'):
+    for f in dt_glob(f'{DT}/**/*.mk') + glob.glob(f'{VND}/*.mk'):
         try:
             ours |= set(re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)',
                                    open(f, encoding='utf-8', errors='replace').read()))
@@ -2169,7 +2181,7 @@ def c61():
             | refset('base_core_modules.txt'))
 
     deps = {}
-    bp_files = [f'{VND}/Android.bp'] + glob.glob(f'{DT}/**/*.bp', recursive=True)
+    bp_files = [f'{VND}/Android.bp'] + dt_glob(f'{DT}/**/*.bp')
     for f in bp_files:
         try:
             t = open(f, encoding='utf-8', errors='replace').read()
@@ -2249,13 +2261,13 @@ def c63():
             return set()
 
     ours = set()
-    for f in [f'{VND}/Android.bp'] + _glob.glob(f'{DT}/**/*.bp', recursive=True):
+    for f in [f'{VND}/Android.bp'] + dt_glob(f'{DT}/**/*.bp'):
         try:
             ours |= set(re.findall(r'^\s*name:\s*"([^"]+)"',
                                    open(f, encoding='utf-8', errors='replace').read(), re.M))
         except OSError:
             pass
-    for f in _glob.glob(f'{DT}/**/*.mk', recursive=True):
+    for f in dt_glob(f'{DT}/**/*.mk'):
         try:
             src = open(f, encoding='utf-8', errors='replace').read()
         except OSError:
@@ -2283,7 +2295,7 @@ def c63():
     prov = load('base_provided_packages.txt')
 
     pkgs = set()
-    for f in _glob.glob(f'{DT}/**/*.mk', recursive=True):
+    for f in dt_glob(f'{DT}/**/*.mk'):
         try:
             t = open(f, encoding='utf-8', errors='replace').read().replace('\\\n', ' ')
         except OSError:

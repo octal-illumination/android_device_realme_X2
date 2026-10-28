@@ -46,8 +46,13 @@ USE_CUSTOM_AUDIO_POLICY := 1
 TARGET_RECOVERY_DEVICE_MODULES := libinit_x2
 
 # Bootloader
-BOARD_INCLUDE_DTB_IN_BOOTIMG := true
-BOARD_INCLUDE_RECOVERY_DTBO := true
+# REVERTED 2026-10-28 (audit round 2). These two were added by commit b494a38 "match official
+# LOS sm6150-common (Miatoll)" but Miatoll uses BOARD_KERNEL_IMAGE_NAME := Image.gz (DTB packed
+# separately via mkbootimg --dtb). OUR kernel is Image.gz-dtb: arch/arm64/boot/Makefile builds
+# Image-dtb/Image.gz-dtb by APPENDING $(DTB_OBJS) into the image (QCOM style). Setting
+# BOARD_INCLUDE_DTB_IN_BOOTIMG therefore packs the DTB a SECOND time via --dtb, and it was not
+# part of the fork baseline that shipped A16. BOARD_KERNEL_SEPARATED_DTBO (dtbo.img) is
+# pre-existing and unaffected. Guarded by lint rule C62.
 TARGET_BOOTLOADER_BOARD_NAME := sm6150
 TARGET_NO_BOOTLOADER := true
 

@@ -1429,7 +1429,6 @@ def c53():
     }
     # Recommended vars (match official sm6150)
     recommended_vars = {
-        'BOARD_INCLUDE_RECOVERY_DTBO': 'recovery DTBO support',
     }
     # NOTE 2026-10-28: dynamic-partition vars REMOVED from recommended — this
     # device's GPT is physical (no super; see C31). Retrofit-dynamic config is
@@ -2184,6 +2183,47 @@ def c61():
              f'{len(deps) - len([d for d in deps if d in ours])} base-proved)')
     return unresolved
 
+# --- C62: kernel image format vs DTB packing (double-DTB / boot-image conflict) ----------------
+# Devices whose kernel image already carries the DTB (Image.gz-dtb / Image-dtb - the QCOM style
+# where arch/arm64/boot/Makefile appends $(DTB_OBJS)) must NOT also set
+# BOARD_INCLUDE_DTB_IN_BOOTIMG, because that adds `--dtb dtb.img` to the same boot image: the DTB
+# ends up packed twice. Conversely a plain Image.gz / Image.lz4 kernel NEEDS the flag (or a
+# prebuilt DTB dir) or the boot image has no DTB at all.
+# Real case: commit b494a38 copied BOARD_INCLUDE_DTB_IN_BOOTIMG from Xiaomi sm6150-common, which
+# uses Image.gz, onto this device which uses Image.gz-dtb (LL-034).
+def c62():
+    try:
+        src = open(f'{DT}/BoardConfig.mk', encoding='utf-8', errors='replace').read()
+    except OSError:
+        chk('C62 kernel image vs DTB packing', False, 'BoardConfig.mk missing')
+        return
+    def var(name):
+        m = re.search(rf'^\s*{name}\s*:?=\s*(\S+)', src, re.M)
+        return m.group(1) if m else None
+    kid = var('BOARD_KERNEL_IMAGE_NAME') or ''
+    inc = (var('BOARD_INCLUDE_DTB_IN_BOOTIMG') or '').lower() == 'true'
+    pre = var('BOARD_PREBUILT_DTBIMAGE_DIR')
+    dtb_in_kernel = kid.endswith('-dtb')
+    if dtb_in_kernel and inc:
+        chk('C62 kernel image vs DTB packing', False,
+            f'BOARD_KERNEL_IMAGE_NAME="{kid}" already appends the DTB, but '
+            f'BOARD_INCLUDE_DTB_IN_BOOTIMG=true packs it again via --dtb — remove one of them')
+    elif (var('BOARD_INCLUDE_RECOVERY_DTBO') or '').lower() == 'true' and \
+            not var('BOARD_PREBUILT_RECOVERY_DTBOIMAGE') and not var('BOARD_PREBUILT_DTBOIMAGE'):
+        chk('C62 kernel image vs DTB packing', False,
+            'BOARD_INCLUDE_RECOVERY_DTBO=true but neither BOARD_PREBUILT_RECOVERY_DTBOIMAGE nor '
+            'BOARD_PREBUILT_DTBOIMAGE is set — core/Makefile then runs '
+            '`cp $(BOARD_PREBUILT_DTBOIMAGE) .../recovery_dtbo` with an EMPTY source (build breaker)')
+    elif (not dtb_in_kernel) and not inc and not pre:
+        chk('C62 kernel image vs DTB packing', False,
+            f'BOARD_KERNEL_IMAGE_NAME="{kid}" carries no DTB and neither '
+            f'BOARD_INCLUDE_DTB_IN_BOOTIMG nor BOARD_PREBUILT_DTBIMAGE_DIR is set — '
+            f'the boot image would ship without a DTB')
+    else:
+        chk('C62 kernel image vs DTB packing', True,
+            f'image="{kid}" include_dtb={inc} prebuilt_dtb_dir={"yes" if pre else "no"} — consistent')
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -2205,7 +2245,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

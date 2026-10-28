@@ -2300,24 +2300,49 @@ def c63():
             n = n2
         return n
 
-    unsupported, single = [], []
+    truth = {                                  # T0/T1/T2 — may establish a verdict
+        'ours': ours,
+        'fetched-source': srcmods,
+        'OEM-image': oem,
+    }
+    hint = {                                   # T4 — may only corroborate, never establish
+        'base_module_universe.txt': uni,
+        'base_interface_modules.txt': iface,
+        'base_provided_packages.txt': prov,
+        'caf_repo_modules.txt': caf,
+        'base_core_modules.txt': core,
+    }
+
+    unsupported, cache_only = [], []
+    counts = {'ours': 0, 'fetched-source': 0, 'OEM-image': 0, 'cache-only': 0}
     for p in sorted(pkgs):
         b = strip(p)
-        if b in ours or b in srcmods or b in oem or b in core or b in iface or b in uni or b in caf:
+        hit_truth = [k for k, v in truth.items() if b in v]
+        if hit_truth:
+            counts[hit_truth[0]] += 1
             continue
-        if b in prov:
-            single.append(p)
+        hit_hint = [k for k, v in hint.items() if b in v]
+        if hit_hint:
+            counts['cache-only'] += 1
+            cache_only.append((p, hit_hint))
         else:
             unsupported.append(p)
 
     chk('C63 PRODUCT_PACKAGES have a provider', not unsupported,
-        (f'{len(unsupported)} entr(y/ies) have NO provider in any source, OEM inventory or cache: '
+        (f'{len(unsupported)} have NO provider in any source, OEM inventory or cache: '
          + ', '.join(unsupported[:8])) if unsupported
-        else f'all {len(pkgs)} entries resolve (ours/sources/OEM/core/interface/universe/caf)')
-    if single:
-        info('C63 entries resting on ONE unverified cache (base_provided_packages.txt)',
-             f'{len(single)}: ' + ', '.join(single) +
-             ' — this is the exact shape the thermal-HAL defect had; re-verify before trusting')
+        else (f'{len(pkgs)} entries: {counts["ours"]} ours, {counts["OEM-image"]} OEM-image, '
+              f'{counts["fetched-source"]} fetched-source (TRUTH), '
+              f'{counts["cache-only"]} cache-only (UNVERIFIED)'))
+    if cache_only:
+        # These are exactly the shape the thermal-HAL defect had. They are NOT failures (a cache
+        # may be right), but they are the outstanding verification debt and are re-listed each run.
+        info('C63 entries resting ONLY on unverified T4 caches',
+             f'{len(cache_only)} of {len(pkgs)}: '
+             + ', '.join(f'{n}{"(single:" + ",".join(c) + ")" if len(c) == 1 else ""}'
+                         for n, c in cache_only[:14])
+             + (' ...' if len(cache_only) > 14 else '')
+             + ' — rebuild these caches from module-info.json (tools/rebuild-caches-from-build.py)')
     return unsupported
 
 

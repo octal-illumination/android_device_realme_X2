@@ -1,0 +1,51 @@
+# Note: This code is purely AI-generated.
+# VERIFICATION STATUS REGISTRY — every source the lint verifies against.
+#
+# TIERS (strict order; a lower tier may CORROBORATE a higher one, never ESTABLISH it):
+#   T1 TRUTH-OEM     extracted from the F.26 firmware itself
+#   T2 TRUTH-SOURCE  fetched from the actual repo at the manifest-pinned revision  (ref/sources/)
+#   T3 TRUTH-BUILD   derived from the build's own artifact (module-info.json)      [pending job]
+#   T4 CACHE         enumeration/curation — UNVERIFIED, may be incomplete or fictional
+#
+# RULE (LL-036): a T4 cache may only produce a HINT. Anything that gates a FAIL must rest on
+# T1/T2/T3. C63 reports how many PRODUCT_PACKAGES entries are still T4-only.
+#
+# file                            tier  provenance / status
+# ---------------------------------------------------------------------------------------------------
+oem_system_libraries.txt          T1    VERIFIED. debugfs ls of /system/lib + /system/lib64 from
+                                        system.raw.img (403 + 500 files, no symlinks). Extract checked
+                                        complete against raw line counts.
+oem_vendor_libraries.txt          T1    VERIFIED. find over the vendor/odm/system_ext/product dump
+                                        (1229 distinct .so names).
+oem_apex_libraries.txt            T1    VERIFIED. com.android.art.release.apex -> apex_payload.img ->
+                                        debugfs /lib64 (libnativehelper, libnativeloader).
+sources/ (58 files)               T2    VERIFIED. Android.bp/Android.mk fetched at manifest-pinned
+                                        revisions (caf sm8150 audio/media/display, qti display x3,
+                                        nxp nfc/secure_element). Rebuild: verify-cache-sources.py
+base_module_universe.txt          T4    UNVERIFIED enumeration. PROVEN INCOMPLETE (contains test
+                                        modules but not libbase/libc++/libcutils). Rebuild after the
+                                        build: rebuild-caches-from-build.py (uses module-info.json).
+base_interface_modules.txt        T4    UNVERIFIED enumeration. Drives C14 collision detection.
+                                        Same rebuild path.
+base_provided_packages.txt        T4    UNVERIFIED, provenance unknown. HAS CONTAINED FICTION
+                                        (android.hardware.thermal-service.qti, which hid a real
+                                        defect). 0 of 149 entries corroborated by T2 sources.
+base_system_libraries.txt         T4    PARTIALLY VERIFIED. Contained the protobuf vendorcompat
+                                        fiction (removed 2026-10-28).
+caf_repo_modules.txt              T4    PARTIALLY VERIFIED (2026-10-28). 182 entries, only 29 ever
+                                        consulted; 3 fictions removed (libqti_vndfwk_detect,
+                                        librmnetctl, libvndfwk_detect_jni.qti -> now shipped as blobs).
+base_core_modules.txt             T4    CURATED, every dependency-resolving entry corroborated T1/T2.
+                                        0 pending. Keep short; prefer rebuilding the universe.
+base_binaries.txt                 T4    UNVERIFIED enumeration (used by C24).
+override_pairs.txt                T4    ALLOWLIST. Each entry must cite base partition flags; the two
+                                        vendor.display.config entries were removed as unfounded.
+device_tree_shared_names.txt      T4    ALLOWLIST (C56 override pairs).
+upstream_known_issues.txt         T4    Free-text notes.
+#
+# MEASURED (2026-10-28) — where PRODUCT_PACKAGES entries actually get their support:
+#   ours (T0, our repos)      50
+#   T1 OEM image              53
+#   T2 fetched sources        21
+#   T4 cache-only             41   <-- the outstanding verification debt
+#   none                       0

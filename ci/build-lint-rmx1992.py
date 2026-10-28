@@ -25,15 +25,35 @@ VND = os.environ.get('X2_LINT_VND') or f'{ROOT}/roms/common/vendor/realme'
 DUMP = '/tmp/rmx_pp/vendor-trust/f26_dump'
 fails, warns = [], []
 
+# --- calibration / build-line awareness -------------------------------------------------
+# Some rules encode facts that are TRUE ONLY FOR ONE LineageOS line (base tables, required
+# BoardConfig vars, platform-compatibility expectations). If the tree being linted moves to a
+# different line while those rules still run, the lint keeps printing confident PASS/FAIL based
+# on the OLD base — i.e. false confidence, the exact failure mode that cost two 12-15h cycles.
+# Rules listed here are annotated as UNCALIBRATED whenever BUILD_TARGET != CALIBRATED_FOR.
+CALIBRATED_FOR = 'lineage-23.2'
+DECLARED_LINE = None          # set in main() from roms/BUILD_TARGET
+LINE_MISMATCH = False         # True when the declared line != CALIBRATED_FOR
+VERSION_SENSITIVE_RULES = ('C1 ', 'C12 ', 'C50 ', 'C53 ')
+
+
+def _uncalibrated_note(name):
+    if LINE_MISMATCH and name.startswith(VERSION_SENSITIVE_RULES):
+        return (f'  [UNCALIBRATED: rule calibrated for {CALIBRATED_FOR}, '
+                f'tree declares {DECLARED_LINE} — verdict is NOT trustworthy until this rule is '
+                f'updated for the new base]')
+    return ''
+
 
 def chk(name, ok, detail=''):
-    print(('PASS  ' if ok else 'FAIL  ') + name + ((' — ' + detail) if detail else ''))
+    note = _uncalibrated_note(name)
+    print(('PASS  ' if ok else 'FAIL  ') + name + ((' — ' + detail) if detail else '') + note)
     if not ok:
         fails.append(name)
 
 
 def warn(name, detail):
-    print('WARN  ' + name + ' — ' + detail)
+    print('WARN  ' + name + ' — ' + detail + _uncalibrated_note(name))
     warns.append(name)
 
 
@@ -1865,6 +1885,26 @@ def c59():
 
 
 def main():
+    global DECLARED_LINE, LINE_MISMATCH
+    DECLARED_LINE = declared_build_line()
+    LINE_MISMATCH = bool(DECLARED_LINE) and DECLARED_LINE != CALIBRATED_FOR
+    if LINE_MISMATCH:
+        print('=' * 78)
+        print('  LINT CALIBRATION MISMATCH')
+        print(f'    this lint is calibrated for : {CALIBRATED_FOR}')
+        print(f'    the tree declares          : {DECLARED_LINE}')
+        print('    Rules ' + ', '.join(r.strip() for r in VERSION_SENSITIVE_RULES) +
+              ' encode base-version facts and are')
+        print('    annotated UNCALIBRATED below. Their PASS/FAIL must not be trusted, taken as')
+        print('    proof of readiness, until they are re-derived for the new base:')
+        print('      C1  AMD-arch rule table (base combo/TARGET_linux-arm.mk)')
+        print('      C12 required BoardConfig vars + value domains (base board_config.mk)')
+        print('      C50 platform-version compatibility matrix')
+        print('      C53 required BoardConfig vars for the SoC/platform')
+        print('    Also re-derive the reference caches (base_interface_modules.txt,')
+        print('    base_module_universe.txt, override_pairs.txt) and re-run')
+        print('    tools/enumerate-base-modules.py before trusting collision rules.')
+        print('=' * 78)
     for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()

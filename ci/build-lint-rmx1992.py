@@ -1884,6 +1884,228 @@ def c59():
     return hits
 
 
+
+# --- C60: ELF DT_NEEDED closure over every shipped blob (boot-failure class) -------------------
+# Soong does NOT validate runtime sonames: a blob can build and install perfectly and still make
+# its process fail to exec at boot because a DT_NEEDED library is absent from the image. This rule
+# enumerates EVERY ELF file we ship, resolves each DT_NEEDED against three providers, and reports
+# exact counts so the coverage is visible instead of assumed:
+#   (1) shipped by our vendor layer      -> resolved
+#   (2) provided by the base tree        -> resolved (soname in ref caches/CORE, or the module name
+#                                           is in base_module_universe / device.mk PRODUCT_PACKAGES)
+#   (3) neither                          -> split by whether stock F.26 had it:
+#         in stock dump  => RISK  (we probably dropped something the device loads)  [WARN]
+#         absent         => MISSING (nothing provides it)                            [FAIL]
+# Pure-Python ELF parser: no readelf dependency, no per-file subprocess.
+def _elf_dt_needed(path):
+    import struct
+    try:
+        with open(path, 'rb') as fh:
+            d = fh.read()
+    except OSError:
+        return None
+    if len(d) < 64 or d[:4] != b'\x7fELF':
+        return None
+    ei_class, ei_data = d[4], d[5]
+    if ei_class not in (1, 2) or ei_data not in (1, 2):
+        return None
+    e = '<' if ei_data == 1 else '>'
+    try:
+        if ei_class == 2:
+            phoff, = struct.unpack_from(e + 'Q', d, 0x20)
+            phentsize, phnum = struct.unpack_from(e + 'HH', d, 0x36)
+            PH, DYN = struct.Struct(e + 'IIQQQQQQ'), struct.Struct(e + 'qQ')
+        else:
+            phoff, = struct.unpack_from(e + 'I', d, 0x1C)
+            phentsize, phnum = struct.unpack_from(e + 'HH', d, 0x2A)
+            PH, DYN = struct.Struct(e + 'IIIIIIII'), struct.Struct(e + 'iI')
+        if phoff == 0 or phnum == 0 or phnum > 4096:
+            return None
+        loads, dyn = [], None
+        for i in range(phnum):
+            off = phoff + i * phentsize
+            if off + PH.size > len(d):
+                break
+            f_ = PH.unpack_from(d, off)
+            if ei_class == 2:
+                ptype, p_off, p_vaddr, p_filesz = f_[0], f_[2], f_[3], f_[5]
+            else:
+                ptype, p_off, p_vaddr, p_filesz = f_[0], f_[1], f_[2], f_[4]
+            if ptype == 1:
+                loads.append((p_vaddr, p_off, p_filesz))
+            elif ptype == 2:
+                dyn = (p_off, p_filesz)
+        if not dyn:
+            return []
+        d_off, d_sz = dyn
+        strtab, strsz, needed_offs = None, None, []
+        for j in range(d_sz // DYN.size):
+            p = d_off + j * DYN.size
+            if p + DYN.size > len(d):
+                break
+            tag, val = DYN.unpack_from(d, p)
+            if tag == 0:
+                break
+            if tag == 1:
+                needed_offs.append(val)
+            elif tag == 5:
+                strtab = val
+            elif tag == 10:
+                strsz = val
+        if strtab is None or not needed_offs:
+            return []
+        f_strtab = None
+        for vaddr, p_off, p_filesz in loads:
+            if vaddr <= strtab < vaddr + max(p_filesz, 1):
+                f_strtab = p_off + (strtab - vaddr)
+                break
+        if f_strtab is None or f_strtab >= len(d):
+            return []
+        end = len(d) if strsz is None else min(len(d), f_strtab + strsz)
+        out = []
+        for no in needed_offs:
+            s = f_strtab + no
+            if s >= end:
+                continue
+            z = d.find(b'\x00', s, end)
+            if z > 0:
+                out.append(d[s:z].decode('utf-8', 'replace'))
+        return out
+    except (struct.error, IndexError, ValueError):
+        return None
+
+
+C60_CORE_SONAMES = {
+    'libc.so', 'libm.so', 'libdl.so', 'liblog.so', 'libutils.so', 'libcutils.so', 'libbinder.so',
+    'libbase.so', 'libstdc++.so', 'libc++.so', 'libc++_shared.so', 'libcrypto.so', 'libssl.so',
+    'libz.so', 'libhidlbase.so', 'libhidltransport.so', 'libhwbinder.so', 'libhardware.so',
+    'libsync.so', 'libion.so', 'libprotobuf-cpp-lite.so', 'libprotobuf-cpp-full.so', 'libui.so',
+    'libgui.so', 'libEGL.so', 'libGLESv1_CM.so', 'libGLESv2.so', 'libvulkan.so',
+    'libnativewindow.so', 'libhidlmemory.so', 'libfmq.so', 'libnl.so', 'libpng.so', 'libjpeg.so',
+    'libexpat.so', 'libtinyxml2.so', 'libsqlite.so', 'libwpa_client.so', 'libnbaio.so',
+    'libstagefright.so', 'libstagefright_foundation.so', 'libmedia.so', 'libaudioclient.so',
+    'libpowermanager.so', 'libmemtrack.so', 'libnetd_client.so', 'libnativeloader.so',
+    'libandroid.so', 'libandroid_runtime.so', 'libandroidfw.so', 'libandroid_net.so',
+    'libhwui.so', 'libminijail.so', 'libprocessgroup.so', 'libnetutils.so', 'libxml2.so',
+    'libcurl.so', 'libyuv.so', 'libtinyalsa.so', 'libvndksupport.so', 'libhardware_legacy.so',
+    'libexif.so', 'libkeystore_binder.so', 'libclang_rt.ubsan_standalone-arm-android.so',
+    'libclang_rt.ubsan_standalone-aarch64-android.so', 'libclang_rt.asan-aarch64-android.so',
+    'libclang_rt.hwasan-aarch64-android.so', 'libprofile.so', 'libnativehelper.so',
+    # core HIDL runtime libraries (system/libhidl + hardware/interfaces) - present on every device
+    'android.hidl.allocator@1.0.so', 'android.hidl.memory@1.0.so',
+    'android.hidl.safe_union@1.0.so', 'android.hidl.safe_union@1.0-impl.so',
+    'android.hidl.token@1.0.so', 'android.hidl.token@1.0-utils.so',
+    'android.hidl.base@1.0.so', 'android.hidl.manager@1.0.so',
+    'android.hidl.manager@1.2.so', 'libhidl-gen-utils.so',
+    'android.frameworks.sensorservice@1.0.so',
+}
+
+
+def c60():
+    if not os.path.isdir(f'{VND}/proprietary'):
+        chk('C60 ELF DT_NEEDED closure', False, f'{VND}/proprietary missing')
+        return
+    shipped, elfs = set(), []
+    for root, _, files in os.walk(f'{VND}/proprietary'):
+        for fn in files:
+            p = os.path.join(root, fn)
+            shipped.add(fn)
+            try:
+                with open(p, 'rb') as fh:
+                    if fh.read(4) == b'\x7fELF':
+                        elfs.append(p)
+            except OSError:
+                pass
+
+    def refset(fn):
+        try:
+            return {ln.split()[0] for ln in open(f'{ROOT}/roms/common/tools/ref/{fn}')
+                    if ln.strip() and not ln.startswith('#')}
+        except OSError:
+            return set()
+    base_sonames = refset('base_system_libraries.txt') | C60_CORE_SONAMES
+    base_ifaces = refset('base_interface_modules.txt')
+    base_sonames |= {n + '.so' for n in base_ifaces} | base_ifaces
+    base_modules = (refset('base_module_universe.txt') | refset('base_provided_packages.txt')
+                    | refset('caf_repo_modules.txt'))
+    # module names we ship / request
+    req_mods = set()
+    try:
+        src = open(f'{DT}/device.mk', encoding='utf-8', errors='replace').read()
+        src = src.replace('\\\n', ' ')
+        for m in re.finditer(r'^PRODUCT_PACKAGES\s*(?:\+=|:=|=)(.*)$', src, re.M):
+            req_mods |= set(m.group(1).split('#')[0].split())
+    except OSError:
+        pass
+
+    def soname_to_module(son):
+        # IMPORTANT: only the '.so' suffix is removed. Earlier this also stripped a trailing
+        # '-1.2.3' package version, which wrongly mapped libprotobuf-cpp-full-3.9.1.so ->
+        # libprotobuf-cpp-full (a DIFFERENT soname the base does build) and silently cleared a
+        # real gap. Version-embedded sonames must stay distinct.
+        return son[:-3] if son.endswith('.so') else son
+
+    edges, distinct, unreadable = 0, {}, 0
+    dependents = {}          # soname -> set of (path, is_executable)
+    for p in elfs:
+        needs = _elf_dt_needed(p)
+        if needs is None:
+            unreadable += 1
+            continue
+        is_exec = ('/bin/' in p) or ('.so' not in os.path.basename(p))
+        for s in needs:
+            edges += 1
+            distinct[s] = distinct.get(s, 0) + 1
+            dependents.setdefault(s, set()).add((os.path.relpath(p, VND), is_exec))
+
+    by_vendor = [s for s in distinct if s in shipped]
+    by_base, missing, risk = [], [], []
+    for s in distinct:
+        if s in shipped:
+            continue
+        mod = soname_to_module(s)
+        if s in base_sonames or mod in base_modules or mod in req_mods:
+            by_base.append(s)
+            continue
+        found_in_stock = any(
+            os.path.exists(f'{DUMP}/{part}/lib{bits}/{s}')
+            for part in ('vendor', 'odm', 'system_ext', 'product')
+            for bits in ('', '64')
+        )
+        (risk if found_in_stock else missing).append(s)
+
+    # A missing soname only breaks the device if something that actually RUNS depends on it.
+    # Libraries that are merely present on disk (never exec'd) are a lower grade of problem, and
+    # the stock F.26 image did not contain several of these at all - so an unresolved name is a
+    # LEAD, not proof. The hard verdict is therefore reserved for unresolved sonames required by
+    # an EXECUTABLE (a /bin/ entry or a file without a .so suffix): that binary cannot start.
+    unresolved = sorted(set(missing) | set(risk))
+    exec_fatal = []
+    for s in unresolved:
+        ex = [dep for dep, is_exec in dependents.get(s, set()) if is_exec]
+        if ex:
+            exec_fatal.append((s, ex))
+
+    detail = (f'{len(elfs)} ELF blobs, {edges} DT_NEEDED edges, {len(distinct)} distinct sonames -> '
+              f'{len(by_vendor)} vendor-provided, {len(by_base)} base-provided, '
+              f'{len(risk)} dropped-but-in-stock, {len(missing)} not-found-anywhere, '
+              f'{len(exec_fatal)} executable-blocking'
+              + (f'; unreadable={unreadable}' if unreadable else ''))
+    chk('C60 ELF DT_NEEDED closure (executable-blocking unresolved)', not exec_fatal, detail)
+    for s, ex in exec_fatal[:10]:
+        print(f'        EXEC-BLOCKING {s} -> {len(ex)} executable(s), e.g. {ex[0]}')
+    if risk:
+        warn('C60 sonames in stock dump but not shipped by us',
+             f'{len(risk)}: ' + ', '.join(sorted(risk)[:8]) +
+             ' — each must be confirmed base-provided (QTI source repo) or deliberately dropped')
+    if missing:
+        libonly = [s for s in sorted(missing) if not any(
+            is_exec for _d, is_exec in dependents.get(s, set()))]
+        if libonly:
+            warn('C60 unresolved sonames referenced only by shared libraries',
+                 f'{len(libonly)}: ' + ', '.join(libonly[:8]) +
+                 ' — cannot load if that library is ever dlopen()ed; verify against the owning HAL')
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -1905,7 +2127,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

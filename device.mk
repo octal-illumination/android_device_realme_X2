@@ -391,9 +391,12 @@ PRODUCT_PACKAGES += \
     vendor.qti.hardware.servicetracker@1.2.vendor
 
 # Soong namespaces
+# X2-audit (2026-10-28): `vendor/nxp/opensource/sn100x` dropped — that repo is not in the
+# LineageOS 23.2 sync set (verified against snippets/lineage.xml; only hardware/nxp/* is synced),
+# so the namespace exported nothing. build/make/core/soong_config.mk only forwards it as
+# NamespacesToExport with no existence validation, so this was a silent dead entry, never a failure.
 PRODUCT_SOONG_NAMESPACES += \
-    $(LOCAL_PATH) \
-    vendor/nxp/opensource/sn100x
+    $(LOCAL_PATH)
 
 # Improve scrolling
 PRODUCT_PROPERTY_OVERRIDES += \

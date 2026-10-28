@@ -1474,8 +1474,6 @@ vendor/lib64/libtinyxml.so
 vendor/lib/libwfdaac_vendor.so
 vendor/lib64/libwpa_client.so
 odm/lib64/oplus_btaudio_offload_if.so
-vendor/lib64/vendor.display.config@1.0.so
-vendor/lib64/vendor.display.config@2.0.so
 odm/lib64/vendor.oplus.hardware.biometrics.fingerprint@2.1.so
 vendor/lib64/vendor.oplus.hardware.cammidasservice@1.0.so
 vendor/lib64/vendor.qti.hardware.improvetouch.touchcompanion@1.0.so

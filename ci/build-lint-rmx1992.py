@@ -23,7 +23,7 @@ ROOT = os.environ.get('X2_LINT_ROOT') or os.path.expanduser('~/Projects/android/
 DT = os.environ.get('X2_LINT_DT') or f'{ROOT}/roms/common/device/X2'
 VND = os.environ.get('X2_LINT_VND') or f'{ROOT}/roms/common/vendor/realme'
 DUMP = '/tmp/rmx_pp/vendor-trust/f26_dump'
-fails, warns = [], []
+fails, warns, infos = [], [], []
 
 # --- calibration / build-line awareness -------------------------------------------------
 # Some rules encode facts that are TRUE ONLY FOR ONE LineageOS line (base tables, required
@@ -55,6 +55,12 @@ def chk(name, ok, detail=''):
 def warn(name, detail):
     print('WARN  ' + name + ' — ' + detail + _uncalibrated_note(name))
     warns.append(name)
+
+
+def info(name, detail):
+    """Informational finding: verified and explained, NOT a defect and NOT a warning."""
+    print('INFO  ' + name + ' — ' + detail)
+    infos.append(name)
 
 
 # --- C0: branch consistency (the lint validates the WORKING TREE — both repos must sit on the same target line) ---
@@ -2106,9 +2112,11 @@ def c60():
              f'{len(risk)}: ' + ', '.join(sorted(risk)) +
              ' — either ship them or record why they are no longer needed')
     if dormant:
-        print(f'        INFO not present anywhere in the OEM image (checked: /system/lib, /system/lib64, '
-              f'vendor, odm, system_ext, product library dirs, and the ART APEX payload), so a binary '
-              f'needing it could not have run on stock either: {", ".join(dormant)}')
+        info('C60 sonames absent from the entire OEM image',
+             f'{len(dormant)}: ' + ', '.join(dormant) +
+             ' — checked /system/lib, /system/lib64, vendor, odm, system_ext, product library dirs '
+             'and the ART APEX payload; a binary whose DT_NEEDED cannot resolve could not have run '
+             'on stock either, so this is not a regression we introduce')
     return risk + dormant
 
 
@@ -2195,7 +2203,7 @@ def main():
         except Exception as e:  # noqa: BLE001
             chk(f'{fn.__name__} (internal)', False, f'{type(e).__name__}: {e}')
     print('-' * 60)
-    print(f'RESULT: {len(fails)} FAIL, {len(warns)} WARN')
+    print(f'RESULT: {len(fails)} FAIL, {len(warns)} WARN, {len(infos)} INFO')
     sys.exit(1 if fails else 0)
 
 

@@ -1,0 +1,17 @@
+# Note: This code is purely AI-generated.
+# OEM-VERIFIED libraries delivered inside APEX packages on the stock F.26 image.
+#
+# WHY: /system/apex exists on the stock image, so a library missing from /system/lib and
+# /system/lib64 is NOT necessarily absent from the device — it can live inside an APEX.
+# Two candidates were proven to be APEX-delivered rather than absent:
+#
+#   com.android.art.release.apex            (87,961,377 bytes, extracted from system.raw.img)
+#     -> unzip -> apex_payload.img -> debugfs /lib64  ==>  libnativehelper.so, libnativeloader.so
+#
+# Evidence commands:
+#   debugfs -R "dump /system/apex/com.android.art.release.apex /tmp/art.apex" <system.raw.img>
+#   unzip -o /tmp/art.apex && debugfs -R "ls -l /lib64" apex_payload.img
+#
+# Our own LineageOS 23.2 build produces the same com.android.art APEX, so these resolve there too.
+libnativehelper.so
+libnativeloader.so

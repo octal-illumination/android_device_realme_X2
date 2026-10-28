@@ -1,0 +1,6 @@
+# Note: This code is purely AI-generated.
+# Upstream code quality baseline (sensors/gps/location from AOSP/Qualcomm).
+# C49 uses this to detect DEVIATION from the expected upstream state.
+# Only warns if the count EXCEEDS these baselines (indicating WE added new issues).
+# Format: expected_todo_count expected_printf_count
+10 10

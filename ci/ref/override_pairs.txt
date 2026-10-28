@@ -1,0 +1,40 @@
+# Note: This code is purely AI-generated.
+# Same-name pairs (our prebuilt vs base source) VERIFIED LEGAL — same-partition / variant-mismatch overrides.
+# Evidence: base partition flags + survival of 3 soong dep-resolution runs with dep-refs present.
+# These names are EXCLUDED from base_interface_modules.txt on purpose (C14 must not flag them).
+# 24.0 / RERUN MANDATE: legality is only valid for the CURRENT base. At every enumeration
+# rerun, RE-VERIFY each pair's base partition (vendor:true/proprietary = still legal;
+# moved to vendor_available/system = NOW FATAL: remove our prebuilt + remove the exclusion).
+# REMOVED as latent collisions on 2026-10-28 (fix commits device 5514e51 / vendor 32e8dcf):
+#   libcodec2_vndk, libdrm, android.hidl.base@1.0 (base system-side vendor_available/interface + our soc_specific prebuilts).
+# CORRECTED 2026-10-28 (pre-build audit, lineage-23.2): the two `vendor.display.config@1.0/@2.0`
+# entries were REMOVED from this allowlist and from the vendor repo. Reason: the base module is
+# `hidl_interface{ system_ext_specific: true }` in vendor/qcom/opensource/interfaces/display/config/
+# (repo IS in the LOS 23.2 sync set) => PartitionTag "system_ext"; our prebuilts were
+# `soc_specific: true` => "vendor". That is the SAME fatal class as the fingerprint HAL
+# (android/prebuilt.go checkInvariantsForSourceAndPrebuilt). Their old justification
+# "silent through 3 runs" was not mechanism-based evidence. Fixed by removing the duplicate
+# prebuilts (base builds these interface libs) — same treatment as libcodec2_vndk/libdrm/
+# android.hidl.base@1.0. LESSON: an allowlist entry justified by "it didn't fail yet" is not
+# evidence; every pair must cite the base module's partition flags.
+# Also safe: libc++_shared (no base module of that name; ours is odm device_specific).
+
+camera.device@1.0-impl  <-  base proprietary:true (vendor-side) — AOSP reference impl never instantiates; our stock impl wins via prefer
+camera.device@3.2-impl  <-  base proprietary:true (eye-verified) — same-partition override, our stock impl preferred
+camera.device@3.3-impl  <-  base proprietary:true (eye-verified) — same-partition override, our stock impl preferred
+camera.device@3.4-external-impl  <-  base vendor:true — same-partition override
+camera.device@3.4-impl  <-  base vendor:true — same-partition override
+camera.device@3.5-external-impl  <-  base vendor:true — same-partition override
+camera.device@3.5-impl  <-  base vendor:true — same-partition override
+camera.device@3.6-external-impl  <-  base vendor:true — same-partition override
+libbluetooth_audio_session  <-  base vendor:true (bluetooth/audio/utils) — same-partition
+libbundlewrapper  <-  base vendor:true (fw/av libeffects/lvm) — same-partition
+libcld80211  <-  base vendor:true (hardware/qcom/wlan) — same-partition
+libdownmix  <-  base vendor:true — same-partition
+libdynproc  <-  base vendor:true — same-partition
+libeffectproxy  <-  base vendor:true — same-partition
+libeffects  <-  base vendor:true — same-partition
+libldnhncr  <-  base vendor:true — same-partition
+libreverbwrapper  <-  base vendor:true — same-partition
+libstdc++  <-  bionic stub, vendor:true; no dep-refs from our modules
+libtinycompress  <-  base vendor:true (external/tinycompress, eye-verified) — 20 dep-refs, silent through 3 soong runs

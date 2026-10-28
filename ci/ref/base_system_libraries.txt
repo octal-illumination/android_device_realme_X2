@@ -1,0 +1,103 @@
+# Note: This code is purely AI-generated.
+# CORRECTED 2026-10-28: removed 4 protobuf-3.9.1 entr(y/ies) that were wrongly listed as
+# base-provided. VERIFIED ABSENT from A16: platform/external/protobuf @android16-release
+# contains 0 occurrences of "3.9.1" or "vendorcompat" (only libprotobuf-cpp-lite / -full).
+# Consequence of the stale entry: the 21 shared_libs deps on *-3.9.1-vendorcompat were
+# silently considered satisfied. The blobs are now shipped from F.26 under the exact
+# runtime sonames (see vendor/realme/Android.bp + C60).
+# Base system libraries provided by the LOS/AOSP build tree (one per line)
+android.frameworks.sensorservice@1.0
+android.hidl.allocator@1.0
+android.hidl.base@1.0
+android.hidl.memory@1.0
+android.hidl.safe_union@1.0
+android.hidl.token@1.0-utils
+libEGL
+libGLESv1_CM
+libGLESv2
+libGLESv3
+libaaudio
+libandroid
+libandroid_net
+libandroid_runtime
+libandroidfw
+libaudioclient
+libaudiofoundation
+libaudioroute
+libaudioutils
+libbase
+libbinder
+libc
+libc++
+libcamera2ndk
+libcamera_metadata
+libchrome
+libclang_rt.ubsan_standalone-arm-android
+libcrypto
+libcutils
+libdl
+libexif
+libexpat
+libfmq
+libgcc
+libgralloctypes
+libgrallocusage
+libgui
+libhardware
+libhardware_legacy
+libhidlbase
+libhidlmemory
+libhidltransport
+libhwbinder
+libhwui
+libinput
+libion
+libjpeg
+libkeystore_binder
+liblog
+libm
+libmdnssd
+libmedia
+libmedia_helper
+libmediandk
+libminjail
+libnativehelper
+libnativewindow
+libnetutils
+libnl
+libpng
+libpower
+libprocessgroup
+libselinux
+libsqlite
+libssl
+libstagefright_foundation
+libsync
+libtinyalsa
+libtinyxml2
+libui
+libutils
+libvndksupport
+libvulkan
+libxml2
+libyuv
+libz
+android.system.net.netd@1.1
+libclang_rt.ubsan_standalone
+libsigmautils
+libstagefright_omx
+libstagefright_xmlparser
+libminijail
+libcurl
+libavservices_minijail
+libstagefright_bufferpool@2.0.1
+libeffectsconfig
+# Added 2026-10-28 (pre-build audit, lineage-23.2): supplied by the BASE tree, not our vendor layer.
+# provider: vendor/qcom/opensource/interfaces/display/config/{1.0,2.0}/Android.bp -> hidl_interface.
+# hidl_interface does NOT propagate `system_ext_specific` to its generated cc modules (verified in
+# system/tools/hidl/build/hidl_interface.go @android16-release); the generated cc_library_shared is
+# `Vendor_available: true`, so its vendor variant installs to /vendor/lib64 exactly where the stock
+# blob used to be. Our duplicate prebuilts were withdrawn because they were soc_specific (=vendor)
+# against a source of PartitionTag "system" -> the same fatal invariant as the fingerprint HAL.
+vendor.display.config@1.0
+vendor.display.config@2.0

@@ -1,0 +1,9 @@
+# Note: This code is purely AI-generated.
+# Names defined BOTH in our device tree (source) AND our vendor tree (prebuilt).
+# Legal soong prebuilt-over-source overrides (same partition); C56 guards NEW pairs.
+# C23 also resolves deps against these (device-tree-provided), preventing forced prebuilt adds
+# (the blind spot that created the android.hidl.base@1.0 prebuilt in the 38-blob round).
+libgps.utils  <- device/X2/gps/utils (vendor:true source) vs our vendor prebuilt (prefer: ours)
+libloc_core   <- device/X2/gps/core   (vendor:true source) vs our vendor prebuilt
+liblocation_api <- device/X2/gps/location (vendor:true source) vs our vendor prebuilt
+vendor.oplus.hardware.biometrics.fingerprint@2.1 <- device/X2/interfaces hidl_interface (device.mk packages it) vs our odm prebuilt

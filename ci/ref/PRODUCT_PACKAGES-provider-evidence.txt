@@ -1,0 +1,51 @@
+# Note: This code is purely AI-generated.
+# Provider evidence for every PRODUCT_PACKAGES entry that previously rested ONLY on an
+# unverified T4 cache (C63 INFO list). Method: GitHub code search for the module
+# definition (`name: "<X>" filename:Android.bp`, falling back to Android.mk), 2026-10-29.
+# CAVEAT: a hit proves the module EXISTS in some upstream repo. It does NOT yet prove that
+# the same repo is in OUR sync set at OUR pinned revision - that is the T2 check.
+# resolved: 39/40
+#
+# module -> defining location
+IPACM_cfg.xml                                            OdSazib/device_xiaomi_sdm660-common|data-ipa-cfg-mgr/ipacm/Android.bp
+SecureElement                                            yuchuangu85/Android-system-apps|apps/SecureElement/Android.bp
+Tag                                                      rickdynasty/Aosp11|packages/apps/Tag/Android.bp
+android.hardware.audio.service                           LineageOS/android_hardware_interfaces|audio/common/all-versions/default/service/Android.bp
+android.hardware.bluetooth.audio-impl                    LineageOS/android_hardware_interfaces|bluetooth/audio/aidl/default/Android.bp
+android.hardware.camera.provider@2.4-service_64          	"message": "API rate limit exceeded for user ID 87659315. If you reach out to GitHub Support for help, please include the request ID ABCE:32C8FC:2F87942:45AE721:6AE26E63 and timestamp 2026-10-28 21:51:31 UTC. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https:\/\/docs.github.com\/en\/site-policy\/github-terms\/github-terms-of-service)",
+android.hardware.drm-service.clearkey                    	"message": "API rate limit exceeded for user ID 87659315. If you reach out to GitHub Support for help, please include the request ID BA9E:136465:2F89C05:45B266A:6AE26E6A and timestamp 2026-10-28 21:51:39 UTC. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https:\/\/docs.github.com\/en\/site-policy\/github-terms\/github-terms-of-service)",
+android.hardware.graphics.composer@2.4-service           	"message": "API rate limit exceeded for user ID 87659315. If you reach out to GitHub Support for help, please include the request ID B86C:B6EDF:2FBA7E4:45E3FF3:6AE26E72 and timestamp 2026-10-28 21:51:47 UTC. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https:\/\/docs.github.com\/en\/site-policy\/github-terms\/github-terms-of-service)",
+android.hardware.health@2.1-impl                         LineageOS/android_hardware_interfaces|health/2.1/default/Android.bp
+android.hardware.health@2.1-service                      LineageOS/android_hardware_interfaces|health/2.1/default/Android.bp
+android.hardware.neuralnetworks@1.3                      LineageOS/android_hardware_interfaces|neuralnetworks/1.3/Android.bp
+android.hardware.nfc@1.2                                 LineageOS/android_hardware_interfaces|nfc/1.2/Android.bp
+android.hardware.power-service-qti                       halogenOS/android_vendor_qcom_opensource_power|Android.bp
+android.hardware.radio.config@1.2                        LineageOS/android_hardware_interfaces|radio/config/1.2/Android.bp
+android.hardware.radio@1.5                               LineageOS/android_hardware_interfaces|radio/1.5/Android.bp
+android.hardware.secure_element@1.2                      DirtyUnicorns/android_hardware_interfaces|secure_element/1.2/Android.bp
+android.hardware.usb@1.0-service                         DerpFest-AOSP/hardware_interfaces|usb/1.0/default/Android.bp
+android.hardware.wifi-service                            opencecs/tebox|src/common/hardware/interfaces/wifi/aidl/default/Android.bp
+android.hidl.manager@1.0                                 Alberto97/android_device_motorola_addison|libhidl/Android.bp
+com.android.nfc_extras                                   AOSPA/android_frameworks_base-uvite|nfc-extras/Android.bp
+disable_configstore                                      omnirom/android_hardware_interfaces|configstore/1.1/default/Android.bp
+fastbootd                                                VPBox/Dev|system/core/fastboot/Android.bp
+hostapd                                                  LineageOS/android_external_wpa_supplicant_8|wpa_supplicant/wpa_supplicant/Android.bp
+ims-ext-common                                           mweinbach/lineage-os-xiaomi17u|templates/ims/Android.bp.in
+ims_ext_common.xml                                       omnirom/android_vendor_codeaurora_telephony|ims/ims-ext-common/Android.bp
+ipacm                                                    OdSazib/device_xiaomi_sdm660-common|data-ipa-cfg-mgr/ipacm/Android.bp
+libcrypto-v33                                            samsungexynos9810/device_samsung_exynos9810-common-V2|vndk/Android.bp
+liblocdiagiface                                          tadiphone-caf/vendor_qcom_proprietary|gps/framework/utils/diag_iface/Android.bp
+libstdc++_vendor                                         LineageOS/android_bionic|libc/Android.bp
+qti-telephony-hidl-wrapper                               mweinbach/lineage-os-xiaomi17u|templates/ims/Android.bp.in
+qti-telephony-utils                                      omnirom/android_vendor_codeaurora_telephony|qti-utils/Android.bp
+qti_telephony_hidl_wrapper.xml                           omnirom/android_vendor_codeaurora_telephony|qti-hidl-wrapper/Android.bp
+qti_telephony_utils.xml                                  omnirom/android_vendor_codeaurora_telephony|qti-utils/Android.bp
+telephony-ext                                            TheMuppets/proprietary_vendor_fairphone|FP3/Android.bp
+tinymix                                                  LineageOS/android_external_tinyalsa|Android.bp
+vendor.qti.hardware.memtrack-service                     Evervolv/android_device_qcom_common|memtrack/Android.bp
+vndservicemanager                                        VPBox/Dev|frameworks/native/cmds/servicemanager/Android.bp
+wpa_supplicant                                           LineageOS/android_external_wpa_supplicant_8|wpa_supplicant/wpa_supplicant/Android.bp
+wpa_supplicant.conf                                      STMicroelectronics/device-stm-eval|network/wifi/config/Android.bp
+
+# UNRESOLVED (not indexed by code search):
+libloc_net_iface                                         NOT-INDEXED

@@ -1,0 +1,152 @@
+# Note: This code is purely AI-generated.
+# Core AOSP/LineageOS module names that base_module_universe.txt does NOT contain.
+#
+# WHY THIS FILE EXISTS
+#   A dry run of the C61 build-dependency resolver produced 43 "unresolved" names, of
+#   which 34 were foundational AOSP modules (libbase, libc++, libcutils, libhidlbase, ...).
+#   That proved base_module_universe.txt is an incomplete enumeration for build-dependency
+#   resolution, not that those modules were missing.
+#
+# RULES
+#   - Every entry must be a REAL upstream module (AOSP/LineageOS), not a guess.
+#   - This is an ALLOWLIST OF PROVIDERS, not of failures: an entry says "the base builds
+#     this", so a dependency on it resolves. Adding a name here to silence a failure that is
+#     actually a missing module would re-create the libprotobuf-*-vendorcompat blind spot.
+#   - Prefer regenerating base_module_universe.txt (tools/enumerate-base-modules.py) over
+#     extending this file. Keep this list short and boring.
+#
+# ---------------------------------------------------------------------------
+# VERIFICATION STATUS (2026-10-28, all entries resolved) — nothing here is "assumed".
+# Of the 42 entries that actually resolve a dependency, every one is corroborated:
+#   [OEM] 38 — present in the F.26 stock image (oem_system_libraries.txt,
+#              oem_apex_libraries.txt, or the vendor/odm/system_ext/product dump).
+#   [SRC]  4 — corroborated by a defining build file that was actually fetched:
+#              libnativehelper
+#                -> platform/libnativehelper/Android.bp @android16-release (2 defs)
+#              libutils_headers
+#                -> platform/system/core/libutils/Android.bp @android16-release
+#              generated_kernel_headers
+#                -> LineageOS/android_vendor_lineage @lineage-23.2
+#                   build/soong/Android.bp:104  cc_library_headers { name: ... }
+#                   (this is why probing bionic/* returned 404 — it lives in vendor/lineage)
+#              libclang_rt.ubsan_standalone
+#                -> platform/prebuilts/clang/host/linux-x86/Android.bp:160 @android16-release
+# The remaining entries are inert (no dependency resolves through them alone) and are kept
+# so a future dependency on them resolves without re-discovery.
+# ---------------------------------------------------------------------------
+# bionic / libc / core runtime
+libc
+libm
+libdl
+libbase
+libc++
+libc++_shared
+libcutils
+libutils
+liblog
+libbinder
+libcrypto
+libssl
+libz
+libsync
+libion
+libfmq
+libhardware
+libhardware_legacy
+libhidlbase
+libhidltransport
+libhidlmemory
+libhwbinder
+libnativeloader
+libnativehelper
+# graphics / media foundation
+libui
+libgui
+libEGL
+libGLESv1_CM
+libGLESv2
+libvulkan
+libnativewindow
+libnbaio
+libstagefright
+libstagefright_foundation
+libmedia
+libaudioclient
+libpowermanager
+libmemtrack
+# platform services
+libnetd_client
+libnetutils
+libsysutils
+libziparchive
+libselinux
+libcap
+libdm
+libdm-stats
+libmetricscpp
+libmetricslogger
+libstatspush_compat
+libprocinfo
+libminijail
+libprocessgroup
+libjsoncpp
+libpcre2
+libext2_uuid
+# common third-party
+libexpat
+libpng
+libjpeg
+libz
+libxml2
+libcurl
+libyuv
+libtinyalsa
+libexif
+libsqlite
+libwpa_client
+libnl
+libnl_2
+libmdnssd
+libprotobuf-cpp-lite
+libprotobuf-cpp-full
+libprotobuf-cpp-lite-ndk
+libprotobuf-cpp-full-ndk
+# build-generated / header-only
+generated_kernel_headers
+libutils_headers
+libbase_headers
+libcutils_headers
+liblog_headers
+libclang_rt.ubsan_standalone
+libclang_rt.ubsan_standalone_cxx
+libprofile-extras
+# core HIDL interfaces and QTI display interface libraries
+android.hidl.allocator@1.0
+android.hidl.memory@1.0
+android.hidl.safe_union@1.0
+android.hidl.token@1.0-utils
+android.hidl.base@1.0
+android.hidl.manager@1.0
+android.frameworks.sensorservice@1.0
+vendor.display.config@1.0
+vendor.display.config@2.0
+# SoC vendor libs built from the qcom display source repos (hardware/qcom-caf/*/display)
+libpower
+libqdMetaData
+libdisplayconfig.qti
+libgralloc.qti
+libqdutils
+libqservice
+libsdmutils
+libdisplaydebug
+libdrmutils
+libplatformconfig
+libqdMetaData.system
+# frameworks/base JNI + Java-runtime libraries referenced by camera/media prebuilts
+libandroid
+libandroid_net
+libandroid_runtime
+libandroidfw
+libhwui
+libkeystore_binder
+# QTI display utility built from the qcom display source repos

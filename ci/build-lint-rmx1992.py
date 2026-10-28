@@ -1446,10 +1446,16 @@ def c53():
 def c54():
     mk = open(f'{DT}/device.mk', encoding='utf-8', errors='replace').read()
     issues = []
-    # Critical packages for dynamic partitions on sm6150
+    # Required packages. NOTE (2026-10-28): 'android.hardware.thermal-service.qti' was REMOVED from
+    # this list. It came from the same Miatoll comparison as the DTB flags (b494a38), but:
+    #   * NO repo in the LOS 23.2 sync set defines it (vendor/qcom/opensource/thermal-engine defines
+    #     only libThermal_headers) — verified by reading that repo's Android.bp @lineage-23.2;
+    #   * the F.26 stock image does not ship it either (it ships an Oplus
+    #     vendor.oplus.hardware.thermalmntcfg@1.0-service instead);
+    #   * our VINTF manifest declares no thermal HAL.
+    # Demanding it forced a dangling PRODUCT_PACKAGES entry (LL-035).
     required_packages = {
-        'fastbootd': 'userspace fastboot — required for flashing dynamic partitions',
-        'android.hardware.thermal-service.qti': 'thermal HAL — without it, device may overheat',
+        'fastbootd': 'userspace fastboot — flashing/OTA path (module exists in AOSP system/core)',
     }
     for pkg, why in required_packages.items():
         if pkg not in mk:

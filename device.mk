@@ -440,8 +440,6 @@ PRODUCT_PACKAGES += \
     vndservicemanager
 
 # Thermal
-PRODUCT_PACKAGES += \
-    android.hardware.thermal-service.qti
 
 # Vibrator
 $(call inherit-product, vendor/qcom/opensource/vibrator/vibrator-vendor-product.mk)

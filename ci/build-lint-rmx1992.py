@@ -2106,6 +2106,63 @@ def c60():
                  f'{len(libonly)}: ' + ', '.join(libonly[:8]) +
                  ' — cannot load if that library is ever dlopen()ed; verify against the owning HAL')
 
+# --- C61: build-dependency resolution (shared_libs / static_libs / header_libs) ----------------
+# Soong aborts when a module declares a dependency that no module provides:
+#   "module X depends on undefined module Y"
+# That class is invisible to every other rule here: C23/C25/C60 check RUNTIME sonames, C14 checks
+# name collisions, C6/C9 check the blob list and PRODUCT_PACKAGES. The defect that motivated this
+# rule - 21 prebuilts linking "libprotobuf-cpp-*-3.9.1-vendorcompat", a module removed after A13 -
+# was found only by manual investigation of C60 output.
+# Resolution order: modules we define -> base module caches -> curated core-module list.
+def c61():
+    def refset(fn):
+        try:
+            return {ln.split()[0] for ln in open(f'{ROOT}/roms/common/tools/ref/{fn}')
+                    if ln.strip() and not ln.startswith('#')}
+        except OSError:
+            return set()
+
+    ours = set()
+    bp_files = glob.glob(f'{VND}/**/*.bp', recursive=True) + glob.glob(f'{DT}/**/*.bp', recursive=True)
+    for f in bp_files:
+        try:
+            ours |= set(re.findall(r'^\s*name:\s*"([^"]+)"', open(f, encoding='utf-8',
+                                                                  errors='replace').read(), re.M))
+        except OSError:
+            pass
+    for f in glob.glob(f'{DT}/**/*.mk', recursive=True) + glob.glob(f'{VND}/*.mk'):
+        try:
+            ours |= set(re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)',
+                                   open(f, encoding='utf-8', errors='replace').read()))
+        except OSError:
+            pass
+
+    base = (refset('base_module_universe.txt') | refset('base_provided_packages.txt')
+            | refset('caf_repo_modules.txt') | refset('base_interface_modules.txt')
+            | refset('base_core_modules.txt'))
+
+    deps = {}
+    bp_files = [f'{VND}/Android.bp'] + glob.glob(f'{DT}/**/*.bp', recursive=True)
+    for f in bp_files:
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for key in ('shared_libs', 'static_libs', 'header_libs'):
+            for m in re.finditer(rf'^\s*{key}:\s*\[(.*?)\]', t, re.M | re.S):
+                for d in re.findall(r'"([^"]+)"', m.group(1)):
+                    deps.setdefault(d, set()).add(os.path.relpath(f, ROOT))
+
+    unresolved = {d: v for d, v in deps.items() if d not in ours and d not in base}
+    chk('C61 build-dependency resolution (shared/static/header libs)', not unresolved,
+        (f'{len(unresolved)} of {len(deps)} declared dependency name(s) resolve to NO known module: '
+         + ', '.join(f'{d} <- {sorted(v)[0]}' for d, v in sorted(unresolved.items())[:8]))
+        if unresolved
+        else f'all {len(deps)} declared dependency names resolve ({len(ours)} ours, '
+             f'{len(deps) - len([d for d in deps if d in ours])} base-proved)')
+    return unresolved
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -2127,7 +2184,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

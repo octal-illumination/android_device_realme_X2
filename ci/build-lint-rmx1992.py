@@ -2556,6 +2556,18 @@ def c64():
         chk('C76 TARGET_KERNEL_CONFIG defconfig exists', not _kmiss,
             ('missing defconfig(s): ' + ', '.join(_kmiss)) if _kmiss
             else 'TARGET_KERNEL_CONFIG resolves to a defconfig in the kernel repo')
+
+    # C77: XML well-formedness
+    _badxml, _nxml = check_xml_wellformed(ROOT)
+    chk('C77 shipped XML is well-formed', not _badxml,
+        ('; '.join(f'{f}: {e}' for f, e in _badxml[:4])) if _badxml
+        else f'all {_nxml} XML file(s) parse')
+
+    # C78: Android.bp structural validity
+    _badbp, _nbp = check_bp_structure(ROOT)
+    chk('C78 Android.bp structural validity', not _badbp,
+        ('; '.join(f'{f}: {e}' for f, e in _badbp[:4])) if _badbp
+        else f'all {_nbp} Android.bp file(s) balanced')
     return bad
 
 
@@ -3183,6 +3195,49 @@ def check_kernel_defconfig(root):
             if not os.path.exists(os.path.join(kdir, 'arch/arm64/configs', cfg)):
                 miss.append(cfg)
     return miss, ''
+
+
+# --- C77 / C78: XML well-formedness and Android.bp structural validity -------------------
+# Measured before writing: 122 XML files (VINTF fragments, configs, overlays) and 26 Android.bp files.
+# Malformed XML breaks VINTF/packaging at packaging time; unbalanced braces in a .bp breaks the soong
+# parse. Both are cheap to check and both were clean on this tree.
+#
+# Duplicate module names within our tree were also measured (4) and deliberately NOT given a new rule:
+# they are exactly the 4 cross-repo source/prebuilt pairs that C58 already verifies agree on partition.
+
+
+def check_xml_wellformed(root):
+    """C77 body: every XML we ship must parse."""
+    import xml.etree.ElementTree as ET
+    files = [x for x in glob.glob(f'{root}/roms/common/device/X2/**/*.xml', recursive=True)
+             if '/ci/ref/' not in x]
+    files += glob.glob(f'{root}/roms/common/vendor/realme/proprietary/**/vintf/**/*.xml', recursive=True)
+    bad = []
+    for x in files:
+        try:
+            ET.parse(x)
+        except Exception as e:                                 # noqa: BLE001
+            bad.append((os.path.relpath(x, root), str(e)[:70]))
+    return bad, len(files)
+
+
+def check_bp_structure(root):
+    """C78 body: every Android.bp must have balanced braces and brackets."""
+    files = [f for f in glob.glob(f'{root}/roms/common/vendor/realme/*.bp')
+             + glob.glob(f'{root}/roms/common/device/X2/**/*.bp', recursive=True)
+             if '/ci/ref/' not in f]
+    bad = []
+    for f in files:
+        try:
+            src = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        scan = _bp_strip_comments(src)
+        if scan.count('{') != scan.count('}'):
+            bad.append((os.path.relpath(f, root), 'unbalanced braces'))
+        elif scan.count('[') != scan.count(']'):
+            bad.append((os.path.relpath(f, root), 'unbalanced brackets'))
+    return bad, len(files)
 
 
 def main():

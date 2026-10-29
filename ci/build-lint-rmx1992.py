@@ -2358,6 +2358,70 @@ def c63():
     return unsupported
 
 
+# --- C64: partition collision against the WHOLE swept base corpus -------------------------------
+# C58 compares our prebuilts against modules in the DEVICE TREE only. That is why the cycle-11
+# failure (libqti_vndfwk_detect, built by hardware/qcom-caf/common as system_ext) was invisible:
+# the conflicting source was in neither our device tree nor the repos C14's cache enumerated.
+# C64 reads the manifest SWEEP corpus (ref/sources/manifest/, every repo in the sync set) and fails
+# when one of our prebuilt names is defined by the base with a different PartitionTag.
+# Same-name-in-different-SOONG-NAMESPACE pairs are LEGAL and are excluded: both trees declaring
+# `soong_namespace` means uniqueness is per-namespace (adjudicated 2026-10-29 for the gnss pairs).
+def c64():
+    import glob as _g
+    sweep = sorted(_g.glob(f'{ROOT}/roms/common/tools/ref/sources/manifest/*'))
+    if not sweep:
+        info('C64 base-corpus collision check', 'sweep corpus absent — run tools/sweep-manifest-sources.py')
+        return
+
+    def mods(text, ns_ok):
+        out=[]; depth=0; cur=None; buf=[]
+        for raw in text.splitlines():
+            code=re.sub(r'//.*$','',raw)
+            if depth==0 and cur is None:
+                m=re.match(r'\s*([a-z_][a-z0-9_]*)\s*\{', code)
+                if m: cur=[m.group(1),[]]
+            if cur is not None: cur[1].append(code)
+            depth+=code.count('{')-code.count('}')
+            if cur is not None and depth<=0:
+                b='\n'.join(cur[1]); nm=re.search(r'^\s*name:\s*"([^"]+)"', b, re.M)
+                if nm:
+                    if re.search(r'^\s*(soc_specific|vendor|proprietary):\s*true', b, re.M): p='vendor'
+                    elif re.search(r'^\s*device_specific:\s*true', b, re.M): p='odm'
+                    elif re.search(r'^\s*system_ext_specific:\s*true', b, re.M): p='system_ext'
+                    elif re.search(r'^\s*product_specific:\s*true', b, re.M): p='product'
+                    else: p='system'
+                    out.append((nm.group(1), p, ns_ok))
+                cur=None; depth=0
+        return out
+
+    ours = {}
+    for f in _g.glob(f'{VND}/Android.bp'):
+        if 'soong_namespace' in open(f, errors='replace').read():
+            pass
+        for n, p, _ in mods(open(f, errors='replace').read(), True):
+            ours[n] = p
+    base = {}
+    for f in sweep:
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        ns = 'soong_namespace' in t
+        for n, p, ns_ok in mods(t, ns):
+            base.setdefault(n, set()).add(p)
+
+    bad = []
+    for n, op in ours.items():
+        if n in base and op != 'system' and op not in base[n]:
+            bad.append((n, op, sorted(base[n])))
+    chk('C64 prebuilt vs base-corpus partition agreement', not bad,
+        (f'{len(bad)} collision(s): ' + ', '.join(f'{n}(ours={o}, base={b})' for n, o, b in bad[:6]))
+        if bad
+        else f'{len(ours)} of our modules checked against {len(base)} base modules from '
+             f'{len(sweep)} swept files')
+    return bad
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -2379,7 +2443,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

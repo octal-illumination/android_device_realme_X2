@@ -2538,6 +2538,24 @@ def c64():
     chk('C74 inherit-product targets and overlay/sepolicy dirs exist', not _badtgt,
         (f'{len(_badtgt)} missing: ' + ', '.join(f'{v} [{f}]' for _k, v, f in _badtgt[:6]))
         if _badtgt else 'every in-repo inherit target, overlay and sepolicy dir exists')
+
+    # C75: required-module and file-reference existence
+    _mreq, _mfile, _nreq, _nfile = check_required_and_filerefs(
+        ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
+    chk('C75 required/fileref targets exist', not (_mreq or _mfile),
+        ('; '.join([f'required -> {t} (from {n})' for n, t in _mreq[:3]]
+                   + [f'{v}: {n} -> {t}' for v, n, t in _mfile[:3]]))
+        if (_mreq or _mfile)
+        else f'{_nreq} required and {_nfile} init_rc/vintf_fragments reference(s) all resolve')
+
+    # C76: TARGET_KERNEL_CONFIG must name a real defconfig
+    _kmiss, _kerr = check_kernel_defconfig(ROOT)
+    if _kmiss is None:
+        warn('C76 kernel defconfig exists', _kerr)
+    else:
+        chk('C76 TARGET_KERNEL_CONFIG defconfig exists', not _kmiss,
+            ('missing defconfig(s): ' + ', '.join(_kmiss)) if _kmiss
+            else 'TARGET_KERNEL_CONFIG resolves to a defconfig in the kernel repo')
     return bad
 
 
@@ -3088,6 +3106,83 @@ def check_inherits_and_dirs(root):
                     if not os.path.exists(os.path.join(root, 'roms/common', lp)):
                         bad.append((var, raw, os.path.basename(mk)))
     return bad
+
+
+# --- C75 / C76: required-module, file-reference and kernel-defconfig existence -----------
+# Three more "no rule to make target" classes, each measured before the rule was written:
+#   C75a  Soong `required: [...]` naming a module that does not exist
+#   C75b  `init_rc:` / `vintf_fragments:` naming a file that does not exist (both are android:"path")
+#   C76   TARGET_KERNEL_CONFIG naming a defconfig that does not exist
+# NOTE ON ZERO COUNTS: `required:` returned 0 entries in this tree. A zero is only meaningful if the
+# extractor can actually see the construct, so the counts are reported in the detail string - a silent
+# zero would be indistinguishable from a blind extractor, which is how earlier rules went wrong.
+
+
+def check_required_and_filerefs(root, base_src):
+    """C75 body: return (missing_required, missing_filerefs, n_required, n_filerefs)."""
+    ours, base = set(), set()
+    bps = [f for f in glob.glob(f'{root}/roms/common/vendor/realme/*.bp')
+           + glob.glob(f'{root}/roms/common/device/X2/**/*.bp', recursive=True)
+           if '/ci/ref/' not in f]
+    for f in bps:
+        ours.update(n for _t, n, _b in bp_modules(f))
+    for f in glob.glob(f'{root}/roms/common/device/X2/**/*.mk', recursive=True) + \
+             glob.glob(f'{root}/roms/common/vendor/realme/*.mk'):
+        if '/ci/ref/' in f:
+            continue
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        ours.update(re.findall(r'^\s*LOCAL_MODULE\s*:?=\s*(\S+)', t, re.M))
+        ours.update(re.findall(r'^\s*LOCAL_PACKAGE_NAME\s*:?=\s*(\S+)', t, re.M))
+    for f in glob.glob(os.path.join(base_src, '*')):
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        base.update(re.findall(r'^\s*name:\s*"([^"]+)"', t, re.M))
+        base.update(re.findall(r'^\s*LOCAL_MODULE\s*:?=\s*(\S+)', t, re.M))
+    allowed = ours | base
+    miss_req, miss_file = [], []
+    n_req = n_file = 0
+    for f in bps:
+        d = os.path.dirname(f)
+        for _t, name, block in bp_modules(f):
+            m = re.search(r'required:\s*\[(.*?)\]', block, re.S)
+            if m:
+                for tok in re.findall(r'"([^"]+)"', m.group(1)):
+                    n_req += 1
+                    if tok not in allowed:
+                        miss_req.append((name, tok))
+            for var in ('init_rc', 'vintf_fragments'):
+                m = re.search(rf'{var}:\s*\[(.*?)\]', block, re.S)
+                if m:
+                    for tok in re.findall(r'"([^"]+)"', m.group(1)):
+                        if '*' in tok:
+                            continue
+                        n_file += 1
+                        if not os.path.exists(os.path.join(d, tok)):
+                            miss_file.append((var, name, tok))
+    return miss_req, miss_file, n_req, n_file
+
+
+def check_kernel_defconfig(root):
+    """C76 body: TARGET_KERNEL_CONFIG must resolve to a real defconfig in the kernel repo."""
+    kdir = f'{root}/roms/common/kernel/sm6150'
+    if not os.path.isdir(kdir):
+        return None, 'kernel repo not present'
+    miss = []
+    for f in glob.glob(f'{root}/roms/common/device/X2/*.mk'):
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for m in re.finditer(r'^\s*TARGET_KERNEL_CONFIG\s*:?=\s*(\S+)', t, re.M):
+            cfg = m.group(1)
+            if not os.path.exists(os.path.join(kdir, 'arch/arm64/configs', cfg)):
+                miss.append(cfg)
+    return miss, ''
 
 
 def main():

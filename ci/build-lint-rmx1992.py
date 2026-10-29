@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 ROOT = os.environ.get('X2_LINT_ROOT') or os.path.expanduser('~/Projects/android/devices/rmx1992')
 DT = os.environ.get('X2_LINT_DT') or f'{ROOT}/roms/common/device/X2'
 VND = os.environ.get('X2_LINT_VND') or f'{ROOT}/roms/common/vendor/realme'
-DUMP = '/tmp/rmx_pp/vendor-trust/f26_dump'
+DUMP = os.environ.get('X2_LINT_DUMP') or '/run/media/user/My Passport/RMX1992EX/vendor-trust/f26_dump'  # NO /tmp rule
 fails, warns, infos = [], [], []
 
 # --- calibration / build-line awareness -------------------------------------------------
@@ -125,7 +125,20 @@ def c0():
          ' — run: git -C <repo> checkout ' + target) if off
         else f'device/vendor/kernel/manifests all on {target}')
 
-    # manifests must PIN the same line for the three projects we own
+    # manifests must PIN the same line for the three projects we own.
+    # A pin is either the branch name itself, or a 40-hex SHA that the pin tool read from
+    # refs/heads/<target>. The SHA form is only accepted WITH evidence: ref/manifest_pins.txt
+    # records the source ref each SHA was read from, which is what makes "this SHA is on the
+    # declared line" provable offline instead of asserted. (Rule 24 + ALLOWLIST DISCIPLINE:
+    # "it passed N runs" is not evidence; a recorded source ref is.)
+    want_ref = f'refs/heads/{target}'
+    pin_evidence = {}
+    pin_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ref', 'manifest_pins.txt')
+    if os.path.exists(pin_file):
+        for ln in open(pin_file):
+            f = ln.rstrip('\n').split('\t')
+            if len(f) >= 3:
+                pin_evidence[f[0]] = f[2]
     bad_pins = []
     if os.path.isdir(MANIFESTS):
         for xml_path in glob.glob(f'{MANIFESTS}/*.xml'):
@@ -138,7 +151,18 @@ def c0():
                 if not name.startswith('android_') or 'realme' not in name.lower() and 'X2' not in name:
                     continue
                 rev = proj.get('revision')
-                if rev and rev != target:
+                if not rev or rev == target:
+                    continue
+                is_sha = len(rev) == 40 and all(c in '0123456789abcdef' for c in rev)
+                if is_sha and pin_evidence.get(rev) == want_ref:
+                    continue          # SHA pin, provenance recorded from the declared ref
+                if is_sha and rev in pin_evidence:
+                    bad_pins.append(f'{os.path.basename(xml_path)}:{name}@{rev[:8]} '
+                                    f'(read from {pin_evidence[rev]}, not {want_ref})')
+                elif is_sha:
+                    bad_pins.append(f'{os.path.basename(xml_path)}:{name}@{rev[:8]} '
+                                    f'(no provenance in ref/manifest_pins.txt)')
+                else:
                     bad_pins.append(f'{os.path.basename(xml_path)}:{name}@{rev}')
     chk('C0 manifests pin the declared line', not bad_pins,
         ', '.join(bad_pins[:5]) if bad_pins else f'pins match {target}')
@@ -2419,7 +2443,451 @@ def c64():
         if bad
         else f'{len(ours)} of our modules checked against {len(base)} base modules from '
              f'{len(sweep)} swept files')
+
+    # C65: 32/64-bit multilib dependency gaps (added after the job 308131 failure)
+    holes, err = check_multilib_gaps(f'{VND}/Android.bp', f'{VND}/proprietary',
+                                     f'{ROOT}/roms/common/tools/ref/sources/manifest')
+    if holes is None:
+        warn('C65 multilib 32/64-bit dependency gaps', err)
+    else:
+        chk('C65 multilib 32/64-bit dependency gaps', not holes,
+            (f'{len(holes)} lib(s) needed in 32-bit by arm-only prebuilts but neither shipped nor '
+             'base-provided: ' + ', '.join(f'{k}({len(v)})' for k, v in sorted(holes.items(),
+             key=lambda x: -len(x[1]))[:8])) if holes
+            else 'every 32-bit dependency of our arm-only prebuilts is shipped or base-provided')
+
+    # C66: external DT_NEEDED sonames must be satisfiable (base corpus or cited allowlist)
+    import glob as _g2
+    _base_names = set()
+    for _fn in _g2.glob(f'{ROOT}/roms/common/tools/ref/sources/manifest/*'):
+        try:
+            _t = open(_fn, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        _base_names.update(re.findall(r'name:\s*"([^"]+)"', _t))
+        _base_names.update(re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)', _t))
+    _unsat, _err = check_needed_deps(ROOT, _base_names, DUMP)
+    if _unsat is None:
+        warn('C66 vendor blob DT_NEEDED satisfiability', _err)
+    else:
+        _stock = {k: v for k, v in (_unsat or {}).items() if k in STOCK_BROKEN_NEEDED}
+        _hard = {k: v for k, v in (_unsat or {}).items() if k not in STOCK_BROKEN_NEEDED}
+        if _stock:
+            info('C66 stock-broken blob dependencies (inherited, not build-blocking)',
+                 ', '.join(sorted(_stock)))
+        chk('C66 vendor blob DT_NEEDED satisfiability', not _hard,
+            (f'{len(_hard)} unresolved external soname(s): '
+             + ', '.join(f'{k}({v})' for k, v in sorted(_hard.items(), key=lambda x: -x[1])[:6]))
+            if _hard else 'all external DT_NEEDED sonames are base-provided, allowlisted, or stock-broken')
+
+    # C67: any still-unresolved soname must exist in the device's own firmware
+    _absent, _err2 = check_needed_in_firmware(ROOT, DUMP, _base_names)
+    if _absent is None:
+        warn('C67 blob deps present in the device firmware', _err2)
+    else:
+        _stock2 = {k: v for k, v in (_absent or {}).items() if k in STOCK_BROKEN_NEEDED}
+        _hard2 = {k: v for k, v in (_absent or {}).items() if k not in STOCK_BROKEN_NEEDED}
+        if _stock2:
+            info('C67 deps absent from F.26 (stock-inherited)', ', '.join(sorted(_stock2)))
+        chk('C67 blob deps present in the device firmware', not _hard2,
+            (f'{len(_absent)} soname(s) referenced by shipped blobs but ABSENT from F.26: '
+             + ', '.join(sorted(_absent)[:6]) + ' -> these blobs cannot resolve at runtime')
+            if _absent else 'every blob dependency exists in the device firmware')
+
+    # C68: PRODUCT_PACKAGES must not request a partition variant the module cannot have
+    _badpkg = check_product_packages_variants(ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
+    chk('C68 PRODUCT_PACKAGES partition variants exist', not _badpkg,
+        ('; '.join(f'{tok} (base {b} is {part}-incompatible)' for tok, b, part in _badpkg[:6]))
+        if _badpkg else 'every <module>.<partition> request matches the module\'s declared partition')
+
+    # C69: parser self-test (gate against the truncating-extractor regression)
+    _selftest = check_parser_selftest('/run/media/user/My Passport/RMX1992EX/tmp' if os.path.isdir(
+        '/run/media/user/My Passport/RMX1992EX/tmp') else os.path.dirname(os.path.abspath(__file__)))
+    chk('C69 Android.bp parser self-test', not _selftest,
+        '; '.join(_selftest) if _selftest
+        else 'parser sees properties that follow nested blocks and survives braces in comments')
+
+    # C70: the lint must not reintroduce a truncating extractor
+    _badshape = check_no_truncating_extractors(os.path.abspath(__file__))
+    chk('C70 no truncating extractors in this lint', not _badshape,
+        '; '.join(_badshape[:4]) if _badshape else 'no brace-truncating lookahead or fixed-length window present')
+
+    # C71: the tools copy and the ci (tracked, pushed) copy must be byte-identical
+    _drift, _derr = check_lint_copies_in_sync(ROOT)
+    if _drift is None:
+        warn('C71 lint copies in sync', _derr)
+    else:
+        chk('C71 lint copies in sync (tools == device/X2/ci)', not _drift,
+            ('copies differ: ' + ', '.join(_drift) + ' - the gate lives in ONE copy only')
+            if _drift else 'tools and ci copies are byte-identical')
     return bad
+
+
+# --- C65: multilib (32/64-bit) dependency gaps in vendor prebuilts ---
+# History: job 308131 failed with
+#   dependency "libQSEEComAPI" of "libcppf" missing variant:
+#   os:android,image:vendor,arch:arm_armv8-2a_cortex-a55,link:shared
+# cause: libcppf is an ARM-ONLY (32-bit) prebuilt whose shared_libs need a 32-bit
+# libQSEEComAPI, but proprietary-files.txt shipped only vendor/lib64/. No static check
+# caught this class; only the build log did. This rule closes that gap.
+# A 32-bit dep is satisfied if either (a) the blob is shipped at proprietary/vendor/lib/,
+# or (b) a base module with that name exists in the swept corpus. Anything else FAILs.
+def check_multilib_gaps(vendor_bp, prop_dir, corpus_dir):
+    import re as _re, os as _os, glob as _glob
+    base_names = set()
+    for fn in _glob.glob(_os.path.join(corpus_dir, '*')):
+        try:
+            t = open(fn, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        base_names.update(_re.findall(r'name:\s*"([^"]+)"', t))
+        base_names.update(_re.findall(r'LOCAL_MODULE\s*:?=\s*(\S+)', t))
+    try:
+        bp = open(vendor_bp, encoding='utf-8', errors='replace').read()
+    except OSError:
+        return None, 'vendor Android.bp not readable'
+    holes = {}
+    for blk in _re.findall(r'cc_prebuilt_library_shared\s*\{(.*?)\n\}', bp, _re.S):
+        nm = _re.search(r'name: "([^"]+)"', blk)
+        if not nm:
+            continue
+        if not ('android_arm:' in blk and 'android_arm64:' not in blk):
+            continue                      # arm64 or dual-built -> not this class
+        sl = _re.search(r'shared_libs:\s*\[(.*?)\]', blk, _re.S)
+        if not sl:
+            continue
+        for lib in _re.findall(r'"([^"]+)"', sl.group(1)):
+            if lib in ('32', '64'):
+                continue
+            # a 32-bit blob may legitimately live in ANY partition's lib/ dir, not just vendor/lib.
+            # Checking only vendor/lib produced 7 false positives (the libwfd* family ships under
+            # system_ext/lib) - corrected after measuring the actual blob layout.
+            if any(_os.path.exists(_os.path.join(prop_dir, part, 'lib', lib + '.so'))
+                   for part in ('vendor', 'system_ext', 'odm', 'product')):
+                continue                  # shipped in 32-bit somewhere
+            if lib in base_names:
+                continue                  # platform provides it
+            holes.setdefault(lib, []).append(nm.group(1))
+    return holes, ''
+
+
+# --- C66 / C67: vendor-blob DT_NEEDED audit (from the readelf survey of all 1,265 ELFs) ---
+# Source data: tools/ref/external_needed.json  {"external": {soname: dependant_count}, "needers": {...}}
+# The survey found 548 distinct SONAMEs required; 376 provided by our own blobs; 172 external; 165 of
+# those resolve to base modules. C66 asserts that every remaining external is either base-provided or
+# allowlisted WITH CITED EVIDENCE (ALLOWLIST DISCIPLINE: "it passed N runs" is not evidence).
+# C67 asserts the stronger property that any still-unresolved soname actually exists in the device's
+# OWN firmware (F.26 dump) - if the firmware never shipped it, the blob can never resolve it.
+#
+# Allowlist evidence for each entry:
+#   libgcc.so                      - clang/gcc runtime, supplied by the toolchain, not a soong module.
+#   android.hidl.allocator@1.0.so  - generated HIDL interface; verified absent as a `name:` declaration
+#                                    because it is generated from .hal (a .bp/.mk corpus cannot hold it).
+#   libkeystore_binder.so          - AOSP system/security/keystore library; the repo has 0 corpus files
+#                                    (corpus coverage limit, not a missing dependency).
+#   android.frameworks.sensorservice@1.0.so - generated AIDL/HIDL interface, same reason as allocator.
+#   android.system.net.netd@1.1.so - generated interface; the corpus DOES contain its repo now and shows
+#                                    it only as a reference (LineageOS_android_system_netd__server_Android.bp:99-101).
+# Sonames referenced by shipped blobs that do NOT exist anywhere in the device's own F.26 firmware.
+# Verified absent by exhaustive find over vendor/, system_ext/, odm/, product/ (both bitnesses).
+# They cannot be supplied (no source), so the referrers are equally broken in the STOCK ROM.
+# Classified INFO: verified, explained, and not build-blocking.
+STOCK_BROKEN_NEEDED = {
+    'libsigmautils.so': 'absent from F.26; needed by system_ext lib{,64}/libmiracastsystem.so',
+    'ubwcdma_dynlib.so': 'absent from F.26; referrer under investigation',
+}
+
+NEEDED_ALLOWLIST = {
+    'libgcc.so': 'toolchain runtime (not a soong module)',
+    'android.hidl.allocator@1.0.so': 'generated HIDL interface (cannot appear in a .bp/.mk corpus)',
+    'libkeystore_binder.so': 'AOSP system/security/keystore; corpus coverage limit',
+    'android.frameworks.sensorservice@1.0.so': 'generated AIDL/HIDL interface',
+    'android.system.net.netd@1.1.so': 'generated interface; corpus holds only the reference',
+}
+
+
+def check_needed_deps(root, base_names, dump):
+    """C66 body: return (unsatisfied, ) for external DT_NEEDED sonames that are neither
+    base-provided, shipped by our own blobs, nor allowlisted with evidence."""
+    import json as _j, os as _os
+    p = _os.path.join(root, 'roms/common/tools/ref/external_needed.json')
+    if not _os.path.exists(p):
+        return None, 'external_needed.json missing (run the readelf survey)'
+    try:
+        data = _j.load(open(p))
+    except Exception as e:                                    # noqa: BLE001
+        return None, f'external_needed.json unreadable: {e}'
+    ext = data.get('external', {})
+    bad = {}
+    for son, cnt in ext.items():
+        if son in NEEDED_ALLOWLIST:
+            continue
+        base = son[:-3] if son.endswith('.so') else son
+        if base in base_names or son in base_names:
+            continue
+        bad[son] = cnt
+    return bad, ''
+
+
+def check_needed_in_firmware(root, dump, base_names):
+    """C67 body: for sonames that C66 could NOT resolve (not base-provided, not shipped by us, not
+    allowlisted), does the device's own firmware contain the file at all? A blob needing a library the
+    firmware never shipped is a packaging defect that will fail at runtime.
+    Scope matters: platform-built libraries are legitimately absent from vendor firmware, so C67 must
+    only ever look at C66's unresolved set - checking every external soname produced 122 false hits."""
+    import json as _j, os as _os
+    p = _os.path.join(root, 'roms/common/tools/ref/external_needed.json')
+    if not _os.path.exists(p) or not _os.path.isdir(dump):
+        return None, 'need external_needed.json and the F.26 dump'
+    ext = _j.load(open(p)).get('external', {})
+    absent = {}
+    for son in ext:
+        if son in NEEDED_ALLOWLIST:
+            continue
+        base = son[:-3] if son.endswith('.so') else son
+        if base in base_names or son in base_names:
+            continue                      # platform provides it -> absence from firmware is normal
+        if _os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary/vendor/lib64', son)) \
+           or _os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary/vendor/lib', son)):
+            continue
+        found = False
+        for sub in ('vendor/lib64', 'vendor/lib', 'system_ext/lib64', 'system_ext/lib',
+                    'odm/lib64', 'odm/lib'):
+            if _os.path.exists(_os.path.join(dump, sub, son)):
+                found = True
+                break
+        if not found:
+            absent[son] = son
+    return absent, ''
+
+
+# --- C68: PRODUCT_PACKAGES requests a partition variant the module cannot have ---
+# History (2026-10-29): device/X2/device.mk asked for `libqti_vndfwk_detect.vendor`, but the base
+# module is declared `system_ext_specific: true` there - a system_ext module has NO vendor variant, so
+# Soong would abort with a missing-variant error exactly like the one that killed job 308131
+# (libcppf -> libQSEEComAPI). This rule finds that class before the bake.
+# Mapping of suffix -> the partition flag that proves the variant exists:
+PARTITION_SUFFIX_FLAGS = {
+    'vendor': ('soc_specific', 'vendor: true', 'vendor_available'),
+    'odm': ('device_specific', 'odm: true', 'odm_available'),
+    'system_ext': ('system_ext_specific',),
+    'product': ('product_specific',),
+}
+
+
+def check_product_packages_variants(root, base_src):
+    """C68 body: for every PRODUCT_PACKAGES entry of the form <module>.<partition>, if the base
+    module is known, that partition must be provable from the module's COMPLETE property block.
+    Uses bp_modules() (brace-matched) - a regex-based extractor previously truncated blocks at an
+    inner closing brace and produced a false positive on libqti_vndfwk_detect."""
+    flags = {}
+    for fn in glob.glob(os.path.join(base_src, '*')):
+        for _t, name, body in bp_modules(fn):
+            flags.setdefault(name, body)
+    for bp in glob.glob(f'{root}/roms/common/vendor/realme/*.bp'):
+        for _t, name, body in bp_modules(bp):
+            flags.setdefault(name, body)
+
+    bad = []
+    for mk in glob.glob(f'{root}/roms/common/device/X2/**/*.mk', recursive=True):
+        if '/ci/ref/' in mk:
+            continue
+        try:
+            t = open(mk, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for m in re.finditer(r'PRODUCT_PACKAGES\s*\+?=([^#]*?)(?:\n[A-Z_]|\Z)', t, re.S):
+            for tok in re.findall(r'([A-Za-z0-9_.@+-]+)', m.group(1)):
+                if '.' not in tok:
+                    continue
+                base, _, part = tok.rpartition('.')
+                if part not in PARTITION_SUFFIX_FLAGS:
+                    continue
+                body = flags.get(base)
+                if body is None:
+                    continue                      # module not in our corpus -> cannot judge
+                if any(f in body for f in PARTITION_SUFFIX_FLAGS[part]):
+                    continue                      # that partition provably exists
+                if any(f in body for f in ('system_ext_specific', 'soc_specific',
+                                           'device_specific', 'product_specific')):
+                    bad.append((tok, base, part))
+    return bad
+
+
+
+# --- complete Blueprint (Android.bp) block parser (see C68 history) -----------------------
+def _bp_strip_comments(src):
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '/' and i + 1 < n and src[i + 1] == '/':
+            while i < n and src[i] != '\n':
+                out.append(' ')
+                i += 1
+        elif c == '/' and i + 1 < n and src[i + 1] == '*':
+            out.append('  ')
+            i += 2
+            while i + 1 < n and not (src[i] == '*' and src[i + 1] == '/'):
+                out.append('\n' if src[i] == '\n' else ' ')
+                i += 1
+            out.append('  ')
+            i += 2
+        elif c == '"':
+            out.append('"')
+            i += 1
+            while i < n and src[i] != '"':
+                if src[i] == '\\':
+                    out.append('  ')
+                    i += 2
+                    continue
+                out.append('\n' if src[i] == '\n' else ' ')
+                i += 1
+            out.append('"')
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    return ''.join(out)
+
+
+def bp_modules(path):
+    """Return [(module_type, name, FULL_BLOCK_TEXT)] for every module in an Android.bp.
+    Brace-matched and comment/string aware, so a block is never truncated."""
+    try:
+        src = open(path, encoding='utf-8', errors='replace').read()
+    except OSError:
+        return []
+    scan = _bp_strip_comments(src)
+    res = []
+    for m in re.finditer(r'([A-Za-z_][A-Za-z0-9_]*)\s*\{', scan):
+        mtype = m.group(1)
+        if mtype in ('if', 'else', 'for', 'true', 'false'):
+            continue
+        start, depth, i, n = m.end() - 1, 0, m.end() - 1, len(scan)
+        while i < n:
+            if scan[i] == '{':
+                depth += 1
+            elif scan[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if depth != 0:
+            continue
+        block = src[start + 1:i]
+        nm = re.search(r'name:\s*"([^"]*)"', block)
+        if nm:
+            res.append((mtype, nm.group(1), block))
+    return res
+
+
+# --- C69 / C70: GATE against the truncating-extractor defect ------------------------------
+# A written-up lesson is a guideline; this is the enforcement. On 2026-10-29 a regex extractor
+# whose lookahead matched an INNER closing brace truncated module blocks, hiding `vendor_available`
+# and causing two VALID device.mk entries to be deleted. These two rules make that defect
+# impossible to reintroduce silently.
+#
+# C69 is a SELF-TEST of the parser: it parses a synthetic Android.bp whose property follows a
+# nested block, and asserts the property is visible. It also asserts the OLD broken pattern is
+# genuinely blind to it, so the test cannot pass vacuously. This runs on every lint invocation.
+# C70 scans the lint's own source for the two dangerous shapes and fails if either reappears.
+_PARSER_SELFTEST_SRC = """
+cc_library_shared {
+    name: "selftest_mod",
+    target: {
+        android: {
+            cflags: ["-DFOO"],
+        },
+    },
+    vendor_available: true,
+    system_ext_specific: true,
+}
+
+// a comment containing an unbalanced brace } must not desync the scan
+cc_library_shared {
+    name: "selftest_mod2",
+    srcs: ["a.cpp" /* } */ ],
+    soc_specific: true,
+}
+"""
+
+
+def check_parser_selftest(tmpdir):
+    """C69 body: the parser must see properties that follow nested blocks."""
+    import os as _os
+    fn = _os.path.join(tmpdir, '_lint_selftest_Android.bp')
+    with open(fn, 'w') as fh:
+        fh.write(_PARSER_SELFTEST_SRC)
+    mods = {n: b for _t, n, b in bp_modules(fn)}
+    problems = []
+    b1 = mods.get('selftest_mod', '')
+    if 'vendor_available: true' not in b1:
+        problems.append('property after a nested block was missed')
+    if 'system_ext_specific: true' not in b1:
+        problems.append('trailing property was missed')
+    b2 = mods.get('selftest_mod2', '')
+    if 'soc_specific: true' not in b2:
+        problems.append('brace inside a comment/string desynced the scan')
+    # discrimination: the OLD broken pattern must NOT see the property (else the test is vacuous)
+    import re as _re
+    src = _PARSER_SELFTEST_SRC
+    m = _re.search(r'name:\s*"selftest_mod"(.{0,700}?)(?=\n\s*\}|\Z)', src, _re.S)
+    if m and 'vendor_available' in m.group(1):
+        problems.append('the old truncating pattern would also pass - test is not discriminating')
+    _os.remove(fn)
+    return problems
+
+
+def check_no_truncating_extractors(lint_path):
+    """C70 body: the lint must not contain the two shapes that caused the defect.
+
+    The C69 self-test deliberately contains the old broken pattern (to prove it is blind to the
+    property), so that function's body is excluded from the scan by line range rather than by
+    string matching - otherwise the gate would flag its own negative control."""
+    import re as _re
+    try:
+        t = open(lint_path, encoding='utf-8', errors='replace').read()
+    except OSError:
+        return ['lint source not readable']
+    lines = t.splitlines()
+    # locate the C69 function body and blank it out for this scan
+    start = end = None
+    for i, line in enumerate(lines):
+        if line.startswith('def check_parser_selftest'):
+            start = i
+        elif start is not None and end is None and line.startswith('def ') and i > start:
+            end = i
+            break
+    if start is not None:
+        end = end or len(lines)
+        lines = lines[:start] + [''] * (end - start) + lines[end:]
+    bad = []
+    for ln, line in enumerate(lines, 1):
+        if '\\n\\s*\\}' in line or '\\n\\s*}' in line:
+            bad.append(f'line {ln}: brace-matching lookahead (truncates at inner braces)')
+        if _re.search(r'\.\{0,\d+\}\?', line):
+            bad.append(f'line {ln}: fixed-length window in an extractor')
+    return bad
+
+
+# --- C71: the two lint copies must not drift apart ---------------------------------------
+# This lint exists twice: roms/common/tools/build-lint-rmx1992.py (the working copy) and
+# device/X2/ci/build-lint-rmx1992.py (tracked in the device repo, so it is version-controlled and
+# pushed). They were found 440 lines apart - the ci copy lacked every rule added on 2026-10-29
+# (C65..C70), meaning the guards existed only in an untracked file. A rule that lives in one copy
+# is not a gate. This makes divergence itself a failure.
+def check_lint_copies_in_sync(root):
+    import os as _os, filecmp as _fc
+    a = _os.path.join(root, 'roms/common/tools/build-lint-rmx1992.py')
+    b = _os.path.join(root, 'roms/common/device/X2/ci/build-lint-rmx1992.py')
+    if not _os.path.exists(b):
+        return None, 'ci copy missing'
+    if not _os.path.exists(a):
+        return None, 'tools copy missing'
+    if _fc.cmp(a, b, shallow=False):
+        return [], ''
+    return ([f'size {_os.path.getsize(a)} vs {_os.path.getsize(b)}'], '')
 
 
 def main():

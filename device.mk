@@ -146,11 +146,11 @@ PRODUCT_PACKAGES += \
     libdisplayconfig.qti \
     libdisplayconfig.system.qti \
     vendor.display.config@1.14.vendor \
-    vendor.display.config@2.0.vendor \
-    vendor.qti.hardware.display.mapper@1.1.vendor \
-    vendor.qti.hardware.display.mapper@2.0.vendor \
-    vendor.qti.hardware.display.mapper@3.0.vendor \
-    vendor.qti.hardware.display.mapper@4.0.vendor \
+    vendor.display.config@2.0 \
+    vendor.qti.hardware.display.mapper@1.1 \
+    vendor.qti.hardware.display.mapper@2.0 \
+    vendor.qti.hardware.display.mapper@3.0 \
+    vendor.qti.hardware.display.mapper@4.0 \
 
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
     ro.surface_flinger.has_wide_color_display=true \
@@ -319,7 +319,7 @@ PRODUCT_PACKAGES += \
 
 # Perf
 PRODUCT_PACKAGES += \
-    vendor.qti.hardware.perf@2.2.vendor
+    vendor.qti.hardware.perf@2.2
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/perf/commonresourceconfigs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/perf/commonresourceconfigs.xml \
@@ -342,9 +342,12 @@ PRODUCT_PACKAGES += \
 # QMI
 PRODUCT_PACKAGES += \
     libqti_vndfwk_detect \
-    libqti_vndfwk_detect.vendor \
-    libvndfwk_detect_jni.qti \
-    libvndfwk_detect_jni.qti.vendor
+    libvndfwk_detect_jni.qti
+# NOTE: the `.vendor` variants of these two were REMOVED. Both are provided by the base tree at
+# hardware/qcom-caf/common/fwk-detect, where libqti_vndfwk_detect is declared
+# `system_ext_specific: true` - a module in system_ext has NO vendor variant, so requesting
+# `libqti_vndfwk_detect.vendor` asks Soong for a variant that cannot exist. Same failure class as
+# job 308131 (libcppf -> libQSEEComAPI: "missing variant"). Guarded by lint C68.
 
 PRODUCT_PACKAGES += \
     libcurl.vendor:64 \

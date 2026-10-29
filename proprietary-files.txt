@@ -1483,12 +1483,8 @@ vendor/lib64/vendor.qti.hardware.trustedui@1.0.so
 vendor/lib64/libcamera_core_hwi.so
 # [C14-removed] vendor/lib64/libeffectsconfig.so  (base builds from source — partition collision)
 vendor/lib64/librilutils.so
-vendor/lib/libqti_vndfwk_detect.so
-vendor/lib64/libqti_vndfwk_detect.so
 vendor/lib/librmnetctl.so
 vendor/lib64/librmnetctl.so
-vendor/lib/libvndfwk_detect_jni.qti.so
-vendor/lib64/libvndfwk_detect_jni.qti.so
 vendor/lib/libprotobuf-cpp-full-3.9.1.so
 vendor/lib/libprotobuf-cpp-lite-3.9.1.so
 vendor/lib64/libprotobuf-cpp-full-3.9.1.so

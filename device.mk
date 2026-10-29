@@ -145,7 +145,7 @@ PRODUCT_PACKAGES += \
     libvulkan \
     libdisplayconfig.qti \
     libdisplayconfig.system.qti \
-    vendor.display.config@1.14.vendor \
+    vendor.display.config@1.14 \
     vendor.display.config@2.0 \
     vendor.qti.hardware.display.mapper@1.1 \
     vendor.qti.hardware.display.mapper@2.0 \
@@ -342,12 +342,16 @@ PRODUCT_PACKAGES += \
 # QMI
 PRODUCT_PACKAGES += \
     libqti_vndfwk_detect \
-    libvndfwk_detect_jni.qti
-# NOTE: the `.vendor` variants of these two were REMOVED. Both are provided by the base tree at
-# hardware/qcom-caf/common/fwk-detect, where libqti_vndfwk_detect is declared
-# `system_ext_specific: true` - a module in system_ext has NO vendor variant, so requesting
-# `libqti_vndfwk_detect.vendor` asks Soong for a variant that cannot exist. Same failure class as
-# job 308131 (libcppf -> libQSEEComAPI: "missing variant"). Guarded by lint C68.
+    libqti_vndfwk_detect.vendor \
+    libvndfwk_detect_jni.qti \
+    libvndfwk_detect_jni.qti.vendor
+# NOTE: these `.vendor` variants ARE valid and were restored. The base modules
+# (hardware/qcom-caf/common/fwk-detect) declare BOTH `system_ext_specific: true` AND
+# `vendor_available: true`, so a vendor variant genuinely exists - the base tree's own
+# install_symlink module even carries `required: ["libvndfwk_detect_jni.qti.vendor"]`.
+# (An earlier C68 report wrongly flagged them; the rule used a regex whose lookahead matched an
+# inner closing brace and truncated the block before `vendor_available`. C68 now uses a complete
+# Blueprint block parser.)
 
 PRODUCT_PACKAGES += \
     libcurl.vendor:64 \

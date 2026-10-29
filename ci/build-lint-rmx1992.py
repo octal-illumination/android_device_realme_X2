@@ -2526,6 +2526,12 @@ def c64():
     chk('C72 PRODUCT_PACKAGES entries resolve to modules', not _unresolved,
         (f'{len(_unresolved)} unresolved: ' + ', '.join(_unresolved[:8]))
         if _unresolved else 'every PRODUCT_PACKAGES entry matches a module (or a known variant of one)')
+
+    # C73: PRODUCT_COPY_FILES sources inside our repos must exist
+    _nocopy = check_copy_files_exist(ROOT)
+    chk('C73 PRODUCT_COPY_FILES sources exist', not _nocopy,
+        (f'{len(_nocopy)} missing: ' + ', '.join(f'{s} [{f}]' for f, s in _nocopy[:6]))
+        if _nocopy else 'every in-repo PRODUCT_COPY_FILES source exists on disk')
     return bad
 
 
@@ -2966,6 +2972,57 @@ def check_product_packages_resolve(root, base_src):
                     continue
                 unknown.append(tok)
     return sorted(set(unknown))
+
+
+# --- C73: PRODUCT_COPY_FILES sources that live in OUR repos must exist ----------------
+# A missing copy source is a "no rule to make target" bake failure. Base-tree sources
+# (frameworks/native/..., frameworks/av/...) cannot be verified without a synced tree, so only
+# paths that resolve into our own repos are checked - that is the part we actually control.
+#
+# PATH MAPPING (learned 2026-10-29): makefiles use AOSP-root-relative paths, but our workspace
+# stores the repos at roms/common/. Comparing the raw string produced 298 false positives
+# ("vendor/realme/X2/proprietary/..." vs the real layout ".../vendor/realme/proprietary/...").
+# The mapping below is the only correct way to resolve them.
+AOSP_TO_LOCAL = (
+    ('device/realme/X2/', 'device/X2/'),
+    ('vendor/realme/X2/', 'vendor/realme/'),
+    ('device/realme/', 'device/'),
+)
+
+
+def _aosp_to_local(path):
+    for a, b in AOSP_TO_LOCAL:
+        if path.startswith(a):
+            return b + path[len(a):]
+    return None
+
+
+def check_copy_files_exist(root):
+    """C73 body: every PRODUCT_COPY_FILES source that maps into our repos must exist on disk."""
+    missing = []
+    mks = [m for m in glob.glob(f'{root}/roms/common/device/X2/**/*.mk', recursive=True)
+           + glob.glob(f'{root}/roms/common/vendor/realme/*.mk')
+           if '/ci/ref/' not in m]
+    for mk in mks:
+        d = os.path.dirname(mk)
+        try:
+            t = open(mk, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        joined = re.sub(r'\\\s*\n\s*', ' ', t)          # join continuation lines
+        for m in re.finditer(r'PRODUCT_COPY_FILES\s*\+?=(.*?)(?=\n\s*\n|PRODUCT_|\Z)', joined, re.S):
+            for tok in m.group(1).split():
+                if ':' not in tok:
+                    continue
+                src = tok.partition(':')[0].replace('$(LOCAL_PATH)', d)
+                if not src or '$' in src:
+                    continue
+                lp = _aosp_to_local(src)
+                if lp is None:
+                    continue                              # base-tree path, unverifiable here
+                if not os.path.exists(os.path.join(root, 'roms/common', lp)):
+                    missing.append((os.path.basename(mk), src))
+    return missing
 
 
 def main():

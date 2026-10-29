@@ -2520,6 +2520,12 @@ def c64():
         chk('C71 lint copies in sync (tools == device/X2/ci)', not _drift,
             ('copies differ: ' + ', '.join(_drift) + ' - the gate lives in ONE copy only')
             if _drift else 'tools and ci copies are byte-identical')
+
+    # C72: every PRODUCT_PACKAGES entry must resolve to a real module
+    _unresolved = check_product_packages_resolve(ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
+    chk('C72 PRODUCT_PACKAGES entries resolve to modules', not _unresolved,
+        (f'{len(_unresolved)} unresolved: ' + ', '.join(_unresolved[:8]))
+        if _unresolved else 'every PRODUCT_PACKAGES entry matches a module (or a known variant of one)')
     return bad
 
 
@@ -2888,6 +2894,78 @@ def check_lint_copies_in_sync(root):
     if _fc.cmp(a, b, shallow=False):
         return [], ''
     return ([f'size {_os.path.getsize(a)} vs {_os.path.getsize(b)}'], '')
+
+
+# --- C72: every PRODUCT_PACKAGES entry must resolve to a real module ---------------------
+# The classic "module not found" bake failure. C68 only checked `<module>.<partition>` forms;
+# a plain missing module name was unchecked.
+#
+# EXTRACTION COMPLETENESS (learned the hard way on 2026-10-29): an initial version scanned only
+# `LOCAL_MODULE` and therefore reported `RealmeParts` as missing - it is defined via
+# `LOCAL_PACKAGE_NAME` in an app Android.mk. Every module-defining make variable is listed here,
+# because a rule that cannot see a definition will invent a defect.
+MK_DEFINING_VARS = ('LOCAL_MODULE', 'LOCAL_PACKAGE_NAME', 'LOCAL_HOST_MODULE',
+                    'LOCAL_MODULE_STEM_32', 'LOCAL_MODULE_STEM_64')
+# Variant suffixes Soong accepts after a module name; stripped before the existence test.
+VARIANT_SUFFIXES = ('vendor', 'odm', 'system_ext', 'product', 'system', 'apex', 'recovery',
+                    'ramdisk', 'vendor_ramdisk', '32', '64')
+
+
+def _modules_defined_in(root, base_src):
+    """Every module name declared by our tree + the swept base corpus (complete extraction)."""
+    ours, base = set(), set()
+    for fn in glob.glob(f'{root}/roms/common/vendor/realme/*.bp'):
+        ours.update(n for _t, n, _b in bp_modules(fn))
+    for fn in glob.glob(f'{root}/roms/common/device/X2/**/*.bp', recursive=True):
+        if '/ci/ref/' in fn:
+            continue
+        ours.update(n for _t, n, _b in bp_modules(fn))
+    for pat, tgt in ((f'{root}/roms/common/device/X2/**/*.mk', ours),
+                     (f'{root}/roms/common/vendor/realme/*.mk', ours),
+                     (os.path.join(base_src, '*'), base)):
+        for fn in glob.glob(pat, recursive=True):
+            if '/ci/ref/' in fn:
+                continue
+            try:
+                t = open(fn, encoding='utf-8', errors='replace').read()
+            except OSError:
+                continue
+            for var in MK_DEFINING_VARS:
+                tgt.update(re.findall(rf'^\s*{var}\s*:?=\s*(\S+)', t, re.M))
+            for _t, n, _b in bp_modules(fn):
+                tgt.add(n)
+    return ours, base
+
+
+def check_product_packages_resolve(root, base_src):
+    """C72 body: return PRODUCT_PACKAGES entries that match no module, even after stripping a
+    known variant suffix."""
+    ours, base = _modules_defined_in(root, base_src)
+    unknown = []
+    for mk in glob.glob(f'{root}/roms/common/device/X2/**/*.mk', recursive=True) + \
+              glob.glob(f'{root}/roms/common/vendor/realme/*.mk'):
+        if '/ci/ref/' in mk:
+            continue
+        try:
+            t = open(mk, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for m in re.finditer(r'PRODUCT_PACKAGES\s*\+?=([^#]*?)(?:\n[A-Z_]|\Z)', t, re.S):
+            for tok in re.findall(r'([A-Za-z0-9_.@+-]+)', m.group(1)):
+                if tok in ours or tok in base:
+                    continue
+                stem = tok
+                for sfx in sorted(VARIANT_SUFFIXES, key=len, reverse=True):
+                    if tok.endswith('.' + sfx) and tok[:-(len(sfx) + 1)] in ours | base:
+                        stem = None
+                        break
+                    if tok.endswith('_' + sfx) and tok[:-(len(sfx) + 1)] in ours | base:
+                        stem = None
+                        break
+                if stem is None:
+                    continue
+                unknown.append(tok)
+    return sorted(set(unknown))
 
 
 def main():

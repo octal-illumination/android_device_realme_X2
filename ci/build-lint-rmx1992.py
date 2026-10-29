@@ -2532,6 +2532,12 @@ def c64():
     chk('C73 PRODUCT_COPY_FILES sources exist', not _nocopy,
         (f'{len(_nocopy)} missing: ' + ', '.join(f'{s} [{f}]' for f, s in _nocopy[:6]))
         if _nocopy else 'every in-repo PRODUCT_COPY_FILES source exists on disk')
+
+    # C74: inherit-product targets and overlay/sepolicy dirs must exist
+    _badtgt = check_inherits_and_dirs(ROOT)
+    chk('C74 inherit-product targets and overlay/sepolicy dirs exist', not _badtgt,
+        (f'{len(_badtgt)} missing: ' + ', '.join(f'{v} [{f}]' for _k, v, f in _badtgt[:6]))
+        if _badtgt else 'every in-repo inherit target, overlay and sepolicy dir exists')
     return bad
 
 
@@ -3023,6 +3029,65 @@ def check_copy_files_exist(root):
                 if not os.path.exists(os.path.join(root, 'roms/common', lp)):
                     missing.append((os.path.basename(mk), src))
     return missing
+
+
+# --- C74: inherit-product targets and overlay/sepolicy dirs must exist ----------------
+# Two more "no rule to make target" classes:
+#   * $(call inherit-product, <path>) / inherit-product-if-exists pointing at a missing .mk
+#   * DEVICE_PACKAGE_OVERLAYS / BOARD_VENDOR_SEPOLICY_DIRS / TARGET_FS_CONFIG_GEN ... pointing at a
+#     directory or file that does not exist
+# Only paths that map into OUR repos are checked; base-tree paths need a synced tree.
+#
+# VARIABLE EXPANSION (learned the hard way): the first attempt expanded only $(LOCAL_PATH) and
+# silently resolved 2 entries instead of 3+, and only 0 of the inherit targets, because these
+# makefiles use $(DEVICE_PATH). Every known path variable is expanded here.
+PATHVARS = ('$(LOCAL_PATH)', '$(DEVICE_PATH)', '$(COMMON_PATH)')
+OVERLAY_VARS = ('DEVICE_PACKAGE_OVERLAYS', 'PRODUCT_PACKAGE_OVERLAYS', 'BOARD_VENDOR_SEPOLICY_DIRS',
+                'SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS', 'BOARD_SEPOLICY_DIRS', 'TARGET_FS_CONFIG_GEN',
+                'BOARD_ODM_SEPOLICY_DIRS', 'BOARD_PRODUCT_SEPOLICY_DIRS')
+
+
+def _expand(p, mkdir, device_path):
+    out = p.replace('$(LOCAL_PATH)', mkdir).replace('$(DEVICE_PATH)', device_path) \
+           .replace('$(COMMON_PATH)', device_path)
+    return None if '$' in out else out
+
+
+def check_inherits_and_dirs(root):
+    """C74 body: return [(kind, value, source_file)] for in-repo targets that do not exist."""
+    device_path = 'device/realme/X2'
+    bad = []
+    mks = [m for m in glob.glob(f'{root}/roms/common/device/X2/**/*.mk', recursive=True)
+           + glob.glob(f'{root}/roms/common/vendor/realme/*.mk')
+           if '/ci/ref/' not in m]
+    for mk in mks:
+        d = os.path.dirname(mk)
+        try:
+            t = open(mk, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for m in re.finditer(r'inherit-product(?:-if-exists)?\s*,\s*([^\s)]+)', t):
+            raw = _expand(m.group(1), d, device_path)
+            if raw is None:
+                continue
+            lp = _aosp_to_local(raw)
+            if lp is None:
+                continue
+            if not os.path.exists(os.path.join(root, 'roms/common', lp)):
+                bad.append(('inherit-product', raw, os.path.basename(mk)))
+        joined = re.sub(r'\\\s*\n\s*', ' ', t)
+        for var in OVERLAY_VARS:
+            for m in re.finditer(rf'^\s*{var}\s*\+?=\s*(.+)$', joined, re.M):
+                for tok in m.group(1).split():
+                    raw = _expand(tok, d, device_path)
+                    if raw is None:
+                        continue
+                    lp = _aosp_to_local(raw)
+                    if lp is None:
+                        continue
+                    if not os.path.exists(os.path.join(root, 'roms/common', lp)):
+                        bad.append((var, raw, os.path.basename(mk)))
+    return bad
 
 
 def main():

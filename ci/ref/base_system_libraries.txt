@@ -101,3 +101,20 @@ libeffectsconfig
 # against a source of PartitionTag "system" -> the same fatal invariant as the fingerprint HAL.
 vendor.display.config@1.0
 vendor.display.config@2.0
+# Added 2026-10-29, WITH EVIDENCE: provided by the BASE, not by us.
+#   provider: hardware/qcom-caf/common @lineage-23.2  fwk-detect/Android.bp
+#             defines libqti_vndfwk_detect AND libvndfwk_detect_jni.qti as system_ext modules.
+# Our vendor prebuilts of these names were REMOVED because they caused the cycle-11 build failure
+#   "partition is different: system_ext(libqti_vndfwk_detect) != vendor(prebuilt_libqti_vndfwk_detect)".
+# Runtime note: the base installs them to /system_ext/lib64, whereas the stock image carried copies
+# in vendor/lib64. Whether vendor processes resolve them across the namespace boundary is a
+# RUNTIME question to verify on device, not a build blocker.
+libqti_vndfwk_detect
+libvndfwk_detect_jni.qti
+# Added 2026-10-29, WITH EVIDENCE from the manifest sweep (1112 repos, 20,249 base modules):
+#   librmnetctl -> vendor/qcom/opensource/dataservices/rmnetctl/Android.bp
+#   libstdc++   -> bionic/libc/Android.bp
+# Both were additionally shipped by us as vendor/odm prebuilts, which aborts the build with
+# "partition is different". Our prebuilts were removed 2026-10-29.
+librmnetctl
+libstdc++

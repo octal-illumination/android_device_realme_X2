@@ -1,0 +1,9 @@
+partition-mismatch (build-aborting class):
+  com.dsi.ant@1.0   ours=vendor  base=system
+  librmnetctl       ours=vendor  base=system
+  libstdc++         ours=odm     base=system
+
+same-name-with-base (UNCERTAIN - needs Soong adjudication):
+  android.hardware.gnss@1.1-impl-qti / @2.1-impl-qti
+  android.hardware.gnss@1.1-service-qti / @2.1-service-qti
+  (ours: device/X2/gps/android/*/Android.mk ; base: hardware/qcom/sm8150/gps/android/*/Android.bp)

@@ -599,6 +599,7 @@ vendor/lib/libcppf.so|c18f874bc6135cd83bcc1ffb892e2d4815311aac
 vendor/lib64/libGPreqcancel.so|b9efbc8623981e1249ad0a0f8964b2b655d2b334
 vendor/lib64/libGPreqcancel_svc.so|507859447820246b21175096753a7e3fb13727ab
 vendor/lib64/libQSEEComAPI.so|34b9e5b28e7f141c40fdb392aba9af60aa98d5b5
+vendor/lib/libQSEEComAPI.so|dd3196f6739f1014b25a89fada46926d7818d7b4
 vendor/lib64/libdrmfs.so|a21f9505fac81e4f0a307d7f7a51efab61d9d0cb
 vendor/lib64/libdrmtime.so|6b51dbccd8d1bfa0c5aa72948f3a6cd079eee426
 vendor/lib64/libops.so|4d1c1e9a8dce82b6d20dd1cdc05121e731e7ab5d

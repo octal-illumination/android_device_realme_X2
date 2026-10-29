@@ -3165,14 +3165,30 @@ def check_required_and_filerefs(root, base_src):
             if m:
                 for tok in re.findall(r'"([^"]+)"', m.group(1)):
                     n_req += 1
-                    if tok not in allowed:
-                        miss_req.append((name, tok))
+                    # A required entry may be a module name, a VARIANT of one
+                    # ("libfoo.vendor" / "libfoo.32"), or a FILE. Comparing the raw token
+                    # against plain module names would flag all three of those wrongly -
+                    # exactly the false-positive class this audit is looking for.
+                    if tok in allowed:
+                        continue
+                    if os.path.exists(os.path.join(d, tok)):
+                        continue                      # names a file next to the module
+                    stem_ok = False
+                    for sfx in sorted(VARIANT_SUFFIXES, key=len, reverse=True):
+                        for sep in ('.', '_'):
+                            if tok.endswith(sep + sfx):
+                                base_tok = tok[:-(len(sfx) + 1)]
+                                if base_tok in allowed:
+                                    stem_ok = True
+                    if stem_ok:
+                        continue                      # a variant of a module we have
+                    miss_req.append((name, tok))
             for var in ('init_rc', 'vintf_fragments'):
                 m = re.search(rf'{var}:\s*\[(.*?)\]', block, re.S)
                 if m:
                     for tok in re.findall(r'"([^"]+)"', m.group(1)):
-                        if '*' in tok:
-                            continue
+                        if '*' in tok or '$' in tok:
+                            continue      # glob or make variable - not a literal path
                         n_file += 1
                         if not os.path.exists(os.path.join(d, tok)):
                             miss_file.append((var, name, tok))
@@ -3192,6 +3208,8 @@ def check_kernel_defconfig(root):
             continue
         for m in re.finditer(r'^\s*TARGET_KERNEL_CONFIG\s*:?=\s*(\S+)', t, re.M):
             cfg = m.group(1)
+            if '$' in cfg:
+                continue                  # a variable, not a literal name - cannot be judged here
             if not os.path.exists(os.path.join(kdir, 'arch/arm64/configs', cfg)):
                 miss.append(cfg)
     return miss, ''

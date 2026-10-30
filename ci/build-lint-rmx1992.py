@@ -2470,8 +2470,11 @@ def c64():
     if _unsat is None:
         warn('C66 vendor blob DT_NEEDED satisfiability', _err)
     else:
-        _stock = {k: v for k, v in (_unsat or {}).items() if k in STOCK_BROKEN_NEEDED}
-        _hard = {k: v for k, v in (_unsat or {}).items() if k not in STOCK_BROKEN_NEEDED}
+        # keyed by "<soname>@<bits>"; STOCK_BROKEN_NEEDED is keyed by soname
+        _stock = {k: v for k, v in (_unsat or {}).items()
+                  if k.rsplit('@', 1)[0] in STOCK_BROKEN_NEEDED}
+        _hard = {k: v for k, v in (_unsat or {}).items()
+                 if k.rsplit('@', 1)[0] not in STOCK_BROKEN_NEEDED}
         if _stock:
             info('C66 stock-broken blob dependencies (inherited, not build-blocking)',
                  ', '.join(sorted(_stock)))

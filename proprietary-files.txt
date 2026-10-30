@@ -1490,3 +1490,21 @@ vendor/lib64/libprotobuf-cpp-full-3.9.1.so
 vendor/lib64/libprotobuf-cpp-lite-3.9.1.so
 # [C14-removed] vendor/lib64/libstagefright_bufferpool@2.0.1.so  (base builds from source — partition collision)
 odm/lib64/vendor.oplus.hardware.bluetooth_audio@1.0.so
+vendor/lib/libStDrvInt.so|daea5be20f666076d0f82262a9a8b46e4cc51158
+vendor/lib/libcamxfdengine.so|f87b839f00af86c45b32bb4f80f00bbf19f4cfbb
+vendor/lib/libcamxstatscore.so|8c59beabe3d38fe251444728c6191529773c3dbb
+odm/lib/libhwconfigurationutil.so|f8a6bb6511a5d0d15323c1165ba3ee4f82418930
+odm/lib/libormshalclient.so|0e3d92ca473493b184d16273a6a2eaafe0fda307
+vendor/lib/libsensorslog.so|64b197386e364647ebd61f0c7350f5973cb8ae94
+vendor/lib/libsns_fastRPC_util.so|624e75e5fd43c6e966aa566eefd94e68db8ac643
+vendor/lib/libsnsapi.so|6c08f5edb728466e038033c15110179dfb480040
+vendor/lib/libsnsdiaglog.so|5fe7e7fda662145c24cc5d86c24aa8e7c7c6c3c3
+vendor/lib/libssc.so|b78972cfb93fa1f94e6811efef0a010270673c2d
+system_ext/lib/libwfdclient.so|a79b97747407b71b78d65acdc763644f5c54d395
+vendor/lib/oplus_btaudio_offload_if.so|3e9f50fa099bb8ba0e2fda950e0ec5e791bcf7dc
+odm/lib/vendor.oplus.hardware.orms@1.0.so|ca909f74a3a5bb1579d027f8f513b913c22f82b9
+vendor/lib/vendor.qti.hardware.dsp@1.0.so|e553aafebc4b5f2908fc03f29b086cd1261aa454
+vendor/lib/vendor.qti.hardware.tui_comm@1.0.so|37a9af9fbdf5e3ec24129037d6f2fc16317ade23
+vendor/lib/libcamera_nn_stub.so|2ed97b0934d13df5a4adfdfcc3dc1d829785350b
+vendor/lib/libcamxfdalgov8.so|5f3914991c53cd403bb89a67aeae2c4ea63a9b3a
+odm/lib/vendor.oplus.hardware.bluetooth_audio@1.0.so|bd568d83371cde430d983c12155406636518663b

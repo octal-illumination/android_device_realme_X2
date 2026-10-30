@@ -2489,10 +2489,16 @@ def c64():
         _hard2 = {k: v for k, v in (_absent or {}).items() if k not in STOCK_BROKEN_NEEDED}
         if _stock2:
             info('C67 deps absent from F.26 (stock-inherited)', ', '.join(sorted(_stock2)))
-        chk('C67 blob deps present in the device firmware', not _hard2,
-            (f'{len(_absent)} soname(s) referenced by shipped blobs but ABSENT from F.26: '
-             + ', '.join(sorted(_absent)[:6]) + ' -> these blobs cannot resolve at runtime')
-            if _absent else 'every blob dependency exists in the device firmware')
+        _in_fw = {k: v for k, v in _hard2.items() if v == 'present in F.26 but NOT shipped'}
+        _no_fw = {k: v for k, v in _hard2.items() if v != 'present in F.26 but NOT shipped'}
+        chk('C67 blob deps shippable by our ROM', not _hard2,
+            '; '.join(filter(None, [
+                (f'{len(_in_fw)} dependenc(ies) present in F.26 but NOT shipped by us (FIXABLE by '
+                 f'copying): ' + ', '.join(sorted(_in_fw)[:5])) if _in_fw else '',
+                (f'{len(_no_fw)} absent from F.26 entirely (stock-inherited, not fixable): '
+                 + ', '.join(sorted(_no_fw)[:4])) if _no_fw else '']))
+            if _hard2 else 'every blob dependency is shipped by us at the required bitness or '
+                           'provided by the platform')
 
     # C68: PRODUCT_PACKAGES must not request a partition variant the module cannot have
     _badpkg = check_product_packages_variants(ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
@@ -2667,13 +2673,16 @@ def check_needed_deps(root, base_names, dump):
         return None, f'external_needed.json unreadable: {e}'
     ext = data.get('external', {})
     bad = {}
-    for son, cnt in ext.items():
+    for key, cnt in ext.items():
+        # keys are "<soname>@<bits>" - bitness-aware. A dependency satisfied at 32-bit does NOT
+        # satisfy a 64-bit consumer, which is the blindness that hid 16 real gaps.
+        son = key.rsplit('@', 1)[0]
         if son in NEEDED_ALLOWLIST:
             continue
         base = son[:-3] if son.endswith('.so') else son
         if base in base_names or son in base_names:
-            continue
-        bad[son] = cnt
+            continue                      # platform builds it (both arch variants)
+        bad[key] = cnt
     return bad, ''
 
 
@@ -2696,16 +2705,19 @@ def _c67_impl(root, dump, base_names):
         return None, 'need external_needed.json and the F.26 dump'
     ext = _j.load(open(p)).get('external', {})
     absent = {}
-    for son in ext:
+    for key in ext:
+        son, _, bits = key.rpartition('@')
         if son in NEEDED_ALLOWLIST:
             continue
         base = son[:-3] if son.endswith('.so') else son
         if base in base_names or son in base_names:
             continue                      # platform provides it -> absence from firmware is normal
-        # shipped by US anywhere at any bitness?
-        if any(_os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary', p, son))
-               for p in ('vendor/lib64', 'vendor/lib', 'system_ext/lib64', 'system_ext/lib',
-                         'odm/lib64', 'odm/lib', 'product/lib64', 'product/lib')):
+        # shipped by US *at the bitness the consumer needs*. A 64-bit copy must NOT satisfy a
+        # 32-bit consumer - that assumption is exactly what hid 16 real gaps.
+        libdir = 'lib' if bits == '32' else 'lib64'
+        if any(_os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary', part,
+                                             libdir, son))
+               for part in ('vendor', 'system_ext', 'odm', 'product')):
             continue
         # not shipped by us: is it at least in the firmware (i.e. obtainable)? either way it is a
         # defect for OUR rom, but the message differs.

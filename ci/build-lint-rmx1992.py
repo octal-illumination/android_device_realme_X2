@@ -2566,6 +2566,12 @@ def c64():
             ('missing defconfig(s): ' + ', '.join(_kmiss)) if _kmiss
             else 'TARGET_KERNEL_CONFIG resolves to a defconfig in the kernel repo')
 
+    # C79: declared deps must have a device variant (job 308190's class)
+    _novar = check_device_variant_siblings(ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
+    chk('C79 dependencies have a device variant', not _novar,
+        ('; '.join(f'{m}: "{d}" should be "{s}"' for m, d, s in _novar[:6])) if _novar
+        else 'no dependency names a host-only module that has a _vendor sibling')
+
     # C77: XML well-formedness
     _badxml, _nxml = check_xml_wellformed(ROOT)
     chk('C77 shipped XML is well-formed', not _badxml,
@@ -3278,6 +3284,53 @@ def check_bp_structure(root):
         elif scan.count('[') != scan.count(']'):
             bad.append((os.path.relpath(f, root), 'unbalanced brackets'))
     return bad, len(files)
+
+
+# --- C79: declared dependency must have a DEVICE variant, not just a name -----------------
+# Job 308190 failed with:
+#   dependency "libstdc++" of "libCOppLceTonemapAPI" missing variant:
+#     os:android,image:vendor,link:shared
+#   available variants: os:linux_glibc,arch:x86_64,link:static
+# C61 passed it, because it only checks that the NAME resolves to some module. "libstdc++" does -
+# as a HOST cc_library. The DEVICE shared variant is declared separately as `libstdc++_vendor`.
+#
+# C79 detects the shape: a module depends on <X>, the base defines <X> but ALSO defines a
+# device-specific sibling <X>_vendor, and our dependency names <X>. That is the signature of a
+# dependency that will fail with "missing variant" at vendor image time.
+def check_device_variant_siblings(root, base_src):
+    """C79 body: return [(module, dep, suggestion)] for deps whose device form is <dep>_vendor."""
+    import re as _re3, glob as _g4, os as _os4
+    # For each base module, record whether it has a VENDOR-CAPABLE variant. A module declared
+    # `vendor_available: true` (or soc_specific / device_specific / system_ext_specific) gets a
+    # vendor variant AUTOMATICALLY, so depending on its plain name is correct and must NOT be
+    # flagged. Only a module with NONE of those flags lacks a device variant - which is the real
+    # defect (`libstdc++` is a bare cc_library and is exactly that case).
+    VENDOR_CAPABLE = ('vendor_available', 'soc_specific', 'device_specific',
+                      'system_ext_specific', 'product_specific', 'vendor: true')
+    defined, vendor_sib, vendor_capable = set(), set(), set()
+    for fn in _g4.glob(_os4.path.join(base_src, '*')):
+        try:
+            t = open(fn, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        for _t, name, body in bp_modules(fn):
+            defined.add(name)
+            if name.endswith('_vendor'):
+                vendor_sib.add(name[:-len('_vendor')])
+            if any(f in body for f in VENDOR_CAPABLE):
+                vendor_capable.add(name)
+    bad = []
+    for bp in _g4.glob(f'{root}/roms/common/vendor/realme/*.bp'):
+        for _t, modname, block in bp_modules(bp):
+            sl = _re3.search(r'shared_libs:\s*\[(.*?)\]', block, _re3.S)
+            if not sl:
+                continue
+            for dep in _re3.findall(r'"([^"]+)"', sl.group(1)):
+                if dep in vendor_capable:
+                    continue                  # vendor variant exists automatically -> fine
+                if dep in vendor_sib and dep + '_vendor' in defined:
+                    bad.append((modname, dep, dep + '_vendor'))
+    return bad
 
 
 def main():

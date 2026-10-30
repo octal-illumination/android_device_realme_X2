@@ -2678,11 +2678,18 @@ def check_needed_deps(root, base_names, dump):
 
 
 def check_needed_in_firmware(root, dump, base_names):
-    """C67 body: for sonames that C66 could NOT resolve (not base-provided, not shipped by us, not
-    allowlisted), does the device's own firmware contain the file at all? A blob needing a library the
-    firmware never shipped is a packaging defect that will fail at runtime.
-    Scope matters: platform-built libraries are legitimately absent from vendor firmware, so C67 must
-    only ever look at C66's unresolved set - checking every external soname produced 122 false hits."""
+    """C67 body: for sonames that C66 could NOT resolve, is the dependency actually SATISFIED BY OUR
+    ROM? Three outcomes matter:
+      * provided by the platform (base corpus)  -> fine, not our problem
+      * shipped by us at the needed bitness     -> fine
+      * present in F.26 but NOT shipped by us   -> DEFECT: the ROM we build will not contain it, so the
+                                                   consumer cannot load at runtime
+    The first version of this rule asked only 'is it in F.26?', which answered the wrong question:
+    16 dependencies exist in the firmware yet are absent from our tree, and the rule passed them."""
+    return _c67_impl(root, dump, base_names)
+
+
+def _c67_impl(root, dump, base_names):
     import json as _j, os as _os
     p = _os.path.join(root, 'roms/common/tools/ref/external_needed.json')
     if not _os.path.exists(p) or not _os.path.isdir(dump):
@@ -2695,17 +2702,17 @@ def check_needed_in_firmware(root, dump, base_names):
         base = son[:-3] if son.endswith('.so') else son
         if base in base_names or son in base_names:
             continue                      # platform provides it -> absence from firmware is normal
-        if _os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary/vendor/lib64', son)) \
-           or _os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary/vendor/lib', son)):
+        # shipped by US anywhere at any bitness?
+        if any(_os.path.exists(_os.path.join(root, 'roms/common/vendor/realme/proprietary', p, son))
+               for p in ('vendor/lib64', 'vendor/lib', 'system_ext/lib64', 'system_ext/lib',
+                         'odm/lib64', 'odm/lib', 'product/lib64', 'product/lib')):
             continue
-        found = False
-        for sub in ('vendor/lib64', 'vendor/lib', 'system_ext/lib64', 'system_ext/lib',
-                    'odm/lib64', 'odm/lib'):
-            if _os.path.exists(_os.path.join(dump, sub, son)):
-                found = True
-                break
-        if not found:
-            absent[son] = son
+        # not shipped by us: is it at least in the firmware (i.e. obtainable)? either way it is a
+        # defect for OUR rom, but the message differs.
+        in_fw = any(_os.path.exists(_os.path.join(dump, sub, son))
+                    for sub in ('vendor/lib64', 'vendor/lib', 'system_ext/lib64', 'system_ext/lib',
+                                'odm/lib64', 'odm/lib', 'product/lib64', 'product/lib'))
+        absent[son] = 'present in F.26 but NOT shipped' if in_fw else 'absent from F.26 entirely'
     return absent, ''
 
 

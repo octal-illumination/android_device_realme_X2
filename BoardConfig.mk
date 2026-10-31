@@ -200,6 +200,13 @@ BOARD_AVB_RECOVERY_ROLLBACK_INDEX := 1
 BOARD_AVB_RECOVERY_ROLLBACK_INDEX_LOCATION := 1
 
 # Wi-Fi
+# NOTE (link failure, 2026-10-31): BOARD_WLAN_CHIP is REQUIRED by lineage-23.2's
+# hardware/qcom/wlan soong_config (namespace qcom_wifi / board_wlan_chip). Without it the
+# `conditions_default` (legacy) branch is selected, and the resulting libwifi-hal link fails
+# with: undefined symbol: cld80211_get_nl_socket_ctx. wcn7760 is the variant whose definition
+# self-consistently links libcld80211 + libpasn without requiring external bsp_dir config.
+# (BOARD_WLAN_DEVICE=qcwcn is still what AOSP's libwifi-hal soong_config reads.)
+BOARD_WLAN_CHIP := wcn7760
 BOARD_WLAN_DEVICE := qcwcn
 BOARD_HOSTAPD_DRIVER := NL80211
 BOARD_HOSTAPD_PRIVATE_LIB := lib_driver_cmd_$(BOARD_WLAN_DEVICE)

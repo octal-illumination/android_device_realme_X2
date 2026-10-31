@@ -3428,6 +3428,49 @@ def check_device_variant_siblings(root, base_src):
     return bad
 
 
+# --- C81: a prebuilt must never `prefer:` over a base SOURCE module ------------------------------
+# History (2026-10-31): three separate build cycles died from exactly this, and all three had been
+# waved through by override_pairs.txt as "same-partition override":
+#   libwifi-hal lost cld80211_get_nl_socket_ctx   (our prebuilt_libcld80211 won)
+#   camera.provider lost the CameraDevice ctors   (our prebuilt camera.device@*-impl won)
+#   audio.bluetooth.default lost BluetoothAudioSessionControl_2_1.h (our prebuilt won)
+# `prefer: true` makes Soong DISCARD base's source module - and with it the ABI symbols and the
+# export_include_dirs that other base modules were written against. A prebuilt can publish neither.
+# Escapes are deliberately narrow: remove prefer:true, drop the prebuilt, or ledger a base-tree
+# patch that disables the base module and record "prefer-ok:<module> ... patch=<id>" in
+# override_pairs.txt. A prose allowlist line is NOT an escape.
+def c81():
+    bp = f'{VND}/Android.bp'
+    if not os.path.isfile(bp):
+        return
+    universe, esc = set(), set()
+    up = f'{ROOT}/roms/common/tools/ref/base_module_universe.txt'
+    if os.path.isfile(up):
+        universe = {ln.split()[0] for ln in open(up) if ln.strip() and not ln.startswith('#')}
+    op = f'{ROOT}/roms/common/tools/ref/override_pairs.txt'
+    if os.path.isfile(op):
+        for ln in open(op):
+            ln = ln.strip()
+            if ln.startswith('prefer-ok:') and 'patch=' in ln:
+                esc.add(ln[len('prefer-ok:'):].split()[0])
+    prefer, cur = [], None
+    for ln in open(bp, encoding='utf-8', errors='replace'):
+        m = re.match(r'\s*name:\s*"([^"]+)"', ln)
+        if m:
+            cur = m.group(1)
+        elif re.match(r'\s*prefer:\s*true', ln) and cur:
+            prefer.append(cur)
+    bad = sorted(set(m for m in prefer if m in universe and m not in esc))
+    chk('C81 no prebuilt prefers over a base source module', not bad,
+        (f'{len(bad)} of {len(set(prefer))} prefer:true module(s) shadow a base source module: '
+         + ', '.join(bad[:6])
+         + ' — a prebuilt publishes no headers and no base ABI, so the break surfaces later in the'
+         ' build (this killed libwifi-hal, camera.provider and audio.bluetooth.default). Fix: drop'
+         ' prefer:true, or drop the prebuilt, or ledger a patch and add prefer-ok:<module>'
+         ' ... patch=<id>') if bad
+        else f'none of {len(set(prefer))} prefer:true module(s) shadows a base source module')
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -3449,7 +3492,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

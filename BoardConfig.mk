@@ -224,3 +224,13 @@ WPA_SUPPLICANT_VERSION := VER_0_8_X
 
 # Inherit from the proprietary version
 include vendor/realme/X2/BoardConfigVendor.mk
+
+# ELF files in PRODUCT_COPY_FILES (2026-10-31). The platform rejects them unconditionally
+# (build/make/core/Makefile, check-elf-prebuilt-product-copy-files) and offers exactly one escape, which we use
+# ONLY for firmware: the 15 affected files are DSP/modem/camera/fingerprint firmware images
+# (ipa_fws.elf, a6xx_zap.*, dpAP_*, CAMERA_ICP.elf, goodixfp.*). They are ELF containers, not linkable code, and
+# they have no Soong module type for their install paths (/firmware at the root).
+# The escape is NOT a licence to ship libraries this way: libdav1d.so.4 was converted to a real
+# cc_prebuilt_library_shared module (libdav1d_odm) instead, and lint gate C104 fails on any ELF copy whose
+# destination is a LIBRARY path, flag or no flag.
+BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true

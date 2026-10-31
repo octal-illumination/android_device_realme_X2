@@ -9,26 +9,14 @@ LOCAL_PATH := $(call my-dir)
 ifeq ($(TARGET_DEVICE),X2)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
-
-include $(CLEAR_VARS)
-
-# A/B builds require us to create the mount points at compile time.
-# Just creating it for all cases since it does not hurt.
-FIRMWARE_MOUNT_POINT := $(TARGET_OUT_VENDOR)/firmware_mnt
-$(FIRMWARE_MOUNT_POINT): $(LOCAL_INSTALLED_MODULE)
-	@echo "Creating $(FIRMWARE_MOUNT_POINT)"
-	@mkdir -p $(TARGET_OUT_VENDOR)/firmware_mnt
-
-BT_FIRMWARE_MOUNT_POINT := $(TARGET_OUT_VENDOR)/bt_firmware
-$(BT_FIRMWARE_MOUNT_POINT): $(LOCAL_INSTALLED_MODULE)
-	@echo "Creating $(BT_FIRMWARE_MOUNT_POINT)"
-	@mkdir -p $(TARGET_OUT_VENDOR)/bt_firmware
-
-DSP_MOUNT_POINT := $(TARGET_OUT_VENDOR)/dsp
-$(DSP_MOUNT_POINT): $(LOCAL_INSTALLED_MODULE)
-	@echo "Creating $(DSP_MOUNT_POINT)"
-	@mkdir -p $(TARGET_OUT_VENDOR)/dsp
-
-ALL_DEFAULT_INSTALLED_MODULES += $(FIRMWARE_MOUNT_POINT) $(BT_FIRMWARE_MOUNT_POINT) $(DSP_MOUNT_POINT)
+# NOTE (Kati failure, 2026-10-31): the legacy mount-point rules were REMOVED.
+# A craft-time `mkdir` recipe for $(TARGET_OUT_VENDOR)/firmware_mnt, /bt_firmware and /dsp
+# collided with the rules Soong now generates for product-specified directories
+# (vendor/lineage/build/core/mkdir.mk -- "may only be used from Soong"), producing:
+#   device/realme/X2/Android.mk:19: error: overriding commands for target
+#   `out/target/product/X2/vendor/firmware_mnt', previously defined at
+#   vendor/lineage/build/core/mkdir.mk:22
+# In lineage-23.2 those directories are created by the build system, so the manual rules are
+# obsolete. Verified none of this device's products still need them.
 
 endif

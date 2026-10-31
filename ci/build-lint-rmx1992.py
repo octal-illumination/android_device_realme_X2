@@ -3710,7 +3710,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4553,6 +4553,53 @@ def c105():
          + ' — the platform fails the module with "DT_NEEDED ... is not specified in shared_libs" and names'
          ' the fix; catching it here costs a second instead of a build cycle') if bad
         else f'{checked} prebuilt(s) checked, every DT_NEEDED entry is declared or base-provided')
+# Note: This code is purely AI-generated.
+# --- C106: module-level properties must not be nested directly under `target:` -------------------------
+# History (2026-10-31): a scripted edit inserted `shared_libs: [...]` directly under `target: {` instead of at
+# module level. bpfmt (C5) accepted it -- it validates SYNTAX, not property placement -- and the build died in
+# soong_build with:  error: vendor/realme/X2/Android.bp:21395:20: unrecognized property "target.shared_libs"
+# Under `target:` only per-arch/per-OS sub-blocks are legal. This gate checks exactly that, so a misplaced
+# property costs a second instead of a build cycle.
+TARGET_KEYS = {
+    'android', 'android_arm', 'android_arm64', 'android_x86', 'android_x86_64', 'android_riscv64',
+    'android_arm_armv8-a', 'android_arm64_armv8-a', 'android_arm64_armv8-2a', 'android_arm64_armv8-2a-dotprod',
+    'host', 'linux_glibc', 'linux_bionic', 'darwin', 'windows', 'windows_x86', 'windows_x86_64',
+    'recovery', 'vendor', 'apex', 'prefer', 'exclude_srcs',
+}
+
+
+def c106():
+    bad = []
+    for bpfile in (f'{VND}/Android.bp', f'{DT}/Android.bp'):
+        if not os.path.isfile(bpfile):
+            continue
+        lines = open(bpfile, encoding='utf-8', errors='replace').read().split('\n')
+        for i, ln in enumerate(lines):
+            m = re.match(r'^(\s*)target:\s*\{\s*$', ln)
+            if not m:
+                continue
+            base = len(m.group(1))
+            depth = 0
+            j = i
+            while j < len(lines):
+                cur = lines[j]
+                # only look at keys at exactly one level deeper than `target:`
+                stripped = cur.strip()
+                if depth == 1 and stripped and not stripped.startswith(('//', '}')):
+                    key = stripped.split(':')[0].strip()
+                    if key and re.match(r'^[a-z_][a-z0-9_]*$', key) and key not in TARGET_KEYS:
+                        bad.append(f'{os.path.relpath(bpfile, ROOT)}:{j + 1} target: {{ {key}: … }}')
+                depth += cur.count('{') - cur.count('}')
+                if depth <= 0 and j > i:
+                    break
+                j += 1
+    chk('C106 only arch/OS blocks may sit directly under target:', not bad,
+        (f'{len(bad)} misplaced property block(s): ' + '; '.join(bad[:3])
+         + ' — soong_build rejects these with "unrecognized property \\"target.<name>\\"" while bpfmt accepts'
+         ' them (it validates syntax, not placement), so only a build would find it') if bad
+        else 'every key directly under target: is an arch/OS block')
+
+
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

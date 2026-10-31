@@ -1457,6 +1457,7 @@ vendor/lib/vendor.qti.hardware.wifidisplaysessionl@1.0-halimpl.so|fefea0a3279f85
 vendor/lib64/com.dsi.ant@1.0.so
 vendor/lib64/libWaterMark.so
 # [C14-removed] vendor/lib64/libavservices_minijail.so  (base builds from source — partition collision)
+# [removed 2026-10-31: BASE builds the source module and exports session/ headers; our prefer:true prebuilt shadowed it]
 vendor/lib64/libbluetooth_audio_session.so
 # [removed 2026-10-31: CAF source provides it; F.26 prebuilt lacks cld80211_get_nl_socket_ctx] vendor/lib64/libcld80211.so
 # [C14-removed] vendor/lib64/libcodec2_vndk.so  (base builds from source — partition collision)

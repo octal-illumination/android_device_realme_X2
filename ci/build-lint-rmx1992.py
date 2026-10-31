@@ -3710,7 +3710,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4389,13 +4389,33 @@ def c104():
     if os.path.isfile(bc):
         broken_allowed = bool(re.search(r'^\s*BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES\s*:?=\s*true',
                                         open(bc, encoding='utf-8', errors='replace').read(), re.M))
-    exceptions = set()
+    # Exceptions are the weakest thing in this file, so they carry two requirements of their own:
+    #   1. an entry MUST have a reason after '#' (evidence, not a bare path) -- an allowlist without evidence is
+    #      exactly LL-023, where a curated list hid a real failure for two cycles;
+    #   2. every exception is reported on every run, so it stays visible as technical debt instead of sinking
+    #      into a file nobody reads.
+    exceptions, unreasoned = set(), []
     exf = f'{ROOT}/roms/common/tools/ref/elf-copy-exceptions.txt'
     if os.path.isfile(exf):
         for ln in open(exf, encoding='utf-8', errors='replace'):
-            ln = ln.split('#', 1)[0].strip()
-            if ln:
-                exceptions.add(ln)
+            if ln.lstrip().startswith('#') or not ln.strip():
+                continue
+            path, _, reason = ln.partition('#')
+            path = path.strip()
+            if not path:
+                continue
+            if len(reason.strip()) < 20:
+                unreasoned.append(path)
+            else:
+                exceptions.add(path)
+    if exceptions:
+        info('C104 cited ELF-copy exception(s)', f'{len(exceptions)} path(s) permitted with evidence: '
+             + ', '.join(sorted(exceptions)))
+    if unreasoned:
+        chk('C104 every ELF-copy exception cites its reason', False,
+            f'{len(unreasoned)} exception(s) have no reason after "#": ' + ', '.join(unreasoned)
+            + ' — an exception without evidence is an allowlist entry, and this project has already been burned'
+            ' by one (LL-023)')
     bad = []
     checked = 0
     for n, ln in enumerate(open(mk, encoding='utf-8', errors='replace').read().splitlines(), 1):
@@ -4434,6 +4454,105 @@ def c104():
          + ' — the platform rejects this unconditionally; declare a cc_prebuilt_library_shared (or the '
          'prebuilt_rfsa type for DSP blobs) with filename_from_src to keep the exact name') if bad
         else f'{checked} copied file(s) checked by magic bytes, none is ELF')
+# Note: This code is purely AI-generated.
+# --- C105: a prebuilt's DT_NEEDED must be declared in its shared_libs (mirror of the build's ELF check) ---
+# History (2026-10-31): four build cycles were spent discovering prebuilt ELF problems the platform validates
+# with out/host/linux-x86/bin/check_elf_file:
+#   error: DT_NEEDED "libstdc++.so" is not specified in shared_libs.
+#   error: Unresolved symbol: AHardwareBuffer_allocate@LIBNATIVEWINDOW
+# Each cycle surfaced a few and the next cycle surfaced more; a sweep found 36 modules with undeclared
+# DT_NEEDED. The check is decidable offline: parse each prebuilt's dynamic section and compare its NEEDED
+# entries with the module's declared shared_libs (module names, or a base-provided soname).
+#
+# ELF parsing is done here rather than shelling out to readelf, so the gate works anywhere the lint runs.
+def _elf_needed(path):
+    """Return the DT_NEEDED sonames of an ELF file. Uses readelf: my first attempt parsed the binary by hand and
+    read DT_STRTAB as a FILE OFFSET when it is a VIRTUAL ADDRESS, producing garbage sonames -- hand-rolling a
+    binary format parser is exactly the kind of "clever" shortcut that wastes a debugging cycle. readelf exists
+    on every dev VM and on the CI image; if it is absent the gate reports INFO rather than guessing."""
+    import shutil
+    import subprocess
+    if not shutil.which('readelf'):
+        return None
+    try:
+        head = open(path, 'rb').read(4)
+    except OSError:
+        return None
+    if head != b'\x7fELF':
+        return None
+    try:
+        out = subprocess.run(['readelf', '-d', path], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return re.findall(r'NEEDED.*\[([^\]]+)\]', out.stdout)
+
+
+def c105():
+    if not os.path.isfile(f'{VND}/Android.bp'):
+        info('C105 prebuilt DT_NEEDED declared', 'vendor Android.bp absent')
+        return
+    base_provided = set()
+    for name in ('base_system_libraries.txt', 'base_core_modules.txt', 'base_module_universe.txt'):
+        f = f'{ROOT}/roms/common/tools/ref/{name}'
+        if os.path.isfile(f):
+            base_provided |= {ln.strip() for ln in open(f, encoding='utf-8', errors='replace')
+                              if ln.strip() and not ln.startswith('#')}
+    # A soname already cited in the C104 exception ledger (with its evidence) is satisfied here too: the same
+    # fact should not have to be re-litigated per gate. Anything NOT cited still fails.
+    excepted = set()
+    exf = f'{ROOT}/roms/common/tools/ref/elf-copy-exceptions.txt'
+    if os.path.isfile(exf):
+        for ln in open(exf, encoding='utf-8', errors='replace'):
+            if ln.lstrip().startswith('#') or not ln.strip():
+                continue
+            path, _, reason = ln.partition('#')
+            if len(reason.strip()) >= 20:
+                excepted.add(os.path.basename(path.strip()))
+    # Only modules that are actually INSTALLED get the platform's check_elf_file. A module left in Android.bp
+    # but absent from PRODUCT_PACKAGES is never built, so reporting it would be noise (and would force us to
+    # delete definitions purely to satisfy a gate).
+    installed = set()
+    mkm = f'{VND}/X2-vendor.mk'
+    if os.path.isfile(mkm):
+        for ln in open(mkm, encoding='utf-8', errors='replace'):
+            t = ln.strip().rstrip('\\').strip()
+            if t and not t.startswith('#') and ' ' not in t and ':=' not in t and '+=' not in t:
+                installed.add(t)
+    bad, checked = [], 0
+    for _t, name, block in bp_modules(f'{VND}/Android.bp'):
+        if _t != 'cc_prebuilt_library_shared':
+            continue
+        if installed and name not in installed:
+            continue
+        libs = set()
+        for m in re.finditer(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
+            libs |= set(re.findall(r'"([^"]+)"', m.group(1)))
+        for m in re.finditer(r'srcs:\s*\[([^\]]*)\]', block, re.S):
+            for src in re.findall(r'"([^"]+)"', m.group(1)):
+                path = f'{VND}/{src}' if not src.startswith('/') else src
+                needed = _elf_needed(path)
+                if not needed:
+                    continue
+                checked += 1
+                for son in needed:
+                    # Strip a TRAILING '.so' plus any version suffix: 'libc++.so.1' -> 'libc++',
+                    # 'libfoo.so.2' -> 'libfoo'. NOT split('.so'), which matched the '.so' inside '.soter' and
+                    # truncated 'vendor.qti.hardware.soter@1.0.so' to 'vendor.qti.hardware' (caught by running
+                    # the gate's own logic against the real module).
+                    stem = re.sub(r'\.so(\.\d+)*$', '', son)
+                    if stem in libs or son in libs:
+                        continue
+                    if stem in base_provided or son in base_provided:
+                        continue
+                    if son in excepted or (son.split('.so')[0] + '.so') in excepted:
+                        continue
+                    bad.append(f'{name}: needs {son}')
+                break
+    chk('C105 a prebuilt declares every DT_NEEDED library', not bad,
+        (f'{len(bad)} undeclared dependency(ies) across prebuilts: ' + '; '.join(bad[:4])
+         + ' — the platform fails the module with "DT_NEEDED ... is not specified in shared_libs" and names'
+         ' the fix; catching it here costs a second instead of a build cycle') if bad
+        else f'{checked} prebuilt(s) checked, every DT_NEEDED entry is declared or base-provided')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

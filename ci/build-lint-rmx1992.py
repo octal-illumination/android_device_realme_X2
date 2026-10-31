@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4313,6 +4313,36 @@ def c102():
          + ' — run `python3 roms/common/tools/build-log-triage.py logs/build/<log> --write`; fixing only the'
          ' first FAILED target is how a latent defect (here: an incomplete depmod map) survives a "fix"') if bad
         else f'{len(logs)} archived log(s) checked, every failed one has a current triage report')
+# Note: This code is purely AI-generated.
+# --- C103: a shipped XML file's declaration must be its first construct ------------------------------
+# History (2026-10-31): two F.26 vendor configs (dsi_config.xml, netmgr_config.xml) put an explanatory comment
+# ABOVE <?xml ...?>. That is invalid XML ("XML declaration allowed only at the start of the document"), and
+# LOS validates every copied xml with xmllint, so both targets failed and the build stopped at 24%.
+# The blobs come from the OEM, so this is exactly the kind of defect that recurs with every new extraction;
+# a sweep of all 180 shipped XML files found these two, and a gate keeps the next extraction honest.
+def c103():
+    roots = [f'{VND}/proprietary', f'{DT}']
+    bad, scanned = [], 0
+    for r in roots:
+        for p in glob.glob(f'{r}/**/*.xml', recursive=True):
+            if '/ci/' in p:
+                continue
+            try:
+                head = open(p, 'rb').read(400)
+            except OSError:
+                continue
+            scanned += 1
+            idx = head.find(b'<?xml')
+            if idx <= 0:
+                continue
+            prefix = head[:idx].replace(b'\xef\xbb\xbf', b'')          # a UTF-8 BOM is allowed
+            if prefix.strip():
+                bad.append(f'{os.path.relpath(p, ROOT)} (preceded by {len(prefix.strip())} bytes)')
+    chk('C103 a shipped XML declaration must come first', not bad,
+        (f'{len(bad)} XML file(s) have content before <?xml ...?>: ' + '; '.join(bad[:3])
+         + ' — xmllint rejects the file ("XML declaration allowed only at the start of the document") and the'
+         ' copy target fails, which stops the build') if bad
+        else f'{scanned} shipped XML file(s) checked, every declaration is first')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

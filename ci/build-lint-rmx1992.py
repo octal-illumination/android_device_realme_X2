@@ -3693,7 +3693,12 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90):
+    # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
+    # build launch can verify documentation currency in seconds instead of the whole suite.
+    _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94):
+        if _only and fn.__name__.upper() not in _only:
+            continue
         try:
             fn()
         except Exception as e:  # noqa: BLE001
@@ -3894,6 +3899,123 @@ def c90():
          ' only by diligence') if ungated
         else 'every failure class in the register maps to a gate')
 # Note: This code is purely AI-generated.
+# --- C91..C94: documentation integrity -------------------------------------------------------------
+# History (2026-10-31): every one of these was found BY HAND during a doc audit, which means none of them
+# was caught by anything mechanical. All four are decidable from the files themselves, so all four are gates.
+# A stale document is not cosmetic: PROJECT_CONTEXT.md is the first file an agent reads (Rule 12a), so a
+# claim like "a build would MISS the bluetooth fixes" becomes the next session's plan.
+
+# Current, reader-facing documents. Deliberately excludes: plan records (dated history, never rewritten),
+# ledgers (append-only), and research archives.
+CURRENT_DOCS = ('PROJECT_CONTEXT.md', 'HANDBOOK.md', 'SPECIFICATION.md', 'ROADMAP.md',
+                'logs/SESSION_STATE.md')
+
+# Phrases that assert work is outstanding. They were all true once and were all stale by the time this gate
+# was written. A document may use them only if the same line marks itself historical (SUPERSEDED/history).
+STALE_PHRASES = (
+    'awaiting approval', 'needs explicit approval', 'pending approval',
+    'not yet deployed', 'NOT on the server yet', 'is not active',
+    'would MISS', 'would re-fail', 'pins are BEHIND', 'Pin hazard',
+)
+
+
+def c91():
+    hits = []
+    for name in CURRENT_DOCS:
+        p = f'{ROOT}/{name}'
+        if not os.path.isfile(p):
+            continue
+        for n, ln in enumerate(open(p, encoding='utf-8', errors='replace').read().splitlines(), 1):
+            low = ln.lower()
+            if 'superseded' in low or 'historical' in low:
+                continue
+            for ph in STALE_PHRASES:
+                if ph.lower() in low:
+                    hits.append(f'{name}:{n} "{ph}"')
+                    break
+    chk('C91 current docs carry no stale outstanding-work claims', not hits,
+        (f'{len(hits)} stale claim(s) in reader-facing docs: ' + '; '.join(hits[:4])
+         + ' — these phrases assert work is outstanding; when the work lands they must be removed or marked'
+         ' SUPERSEDED, because a stale state doc becomes the next session\'s plan (LL-049)') if hits
+        else f'{len(CURRENT_DOCS)} current docs scanned for {len(STALE_PHRASES)} stale-state phrases')
+
+
+def c92():
+    """Rule 18e: every pointer-carrying .md must have an .html sibling that is not older than it."""
+    missing, stale = [], []
+    for md in glob.glob(f'{ROOT}/**/*.md', recursive=True):
+        if '/ci/ref/' in md:
+            continue
+        try:
+            first = open(md, encoding='utf-8', errors='replace').readline()
+        except OSError:
+            continue
+        if not first.startswith('<!-- HTML sibling: regenerate ONLY via'):
+            continue
+        html = md[:-3] + '.html'
+        rel = os.path.relpath(md, ROOT)
+        if not os.path.isfile(html):
+            missing.append(rel)
+        elif os.path.getmtime(md) > os.path.getmtime(html):
+            stale.append(rel)
+    bad = missing + stale
+    chk('C92 every doc-zone .md has an up-to-date .html sibling', not bad,
+        (f'{len(missing)} missing and {len(stale)} stale sibling(s): ' + ', '.join(bad[:5])
+         + ' — Rule 18a requires regenerating the sibling in the same step, via'
+         ' `bash ~/Projects/scripts/generate-docs-html.sh <file>`') if bad
+        else 'every pointer-carrying .md has a current .html sibling')
+
+
+def c93():
+    """The pins stated by the state document must BE the pins. This is the exact defect that survived: the
+    document said a build 'would MISS the bluetooth fixes' while the manifest had already been re-pinned."""
+    pc = f'{ROOT}/PROJECT_CONTEXT.md'
+    man = glob.glob(f'{ROOT}/roms/lineage/manifests/*.xml')
+    if not os.path.isfile(pc) or not man:
+        info('C93 state doc states the live pins', 'PROJECT_CONTEXT.md or manifest absent')
+        return
+    text = open(pc, encoding='utf-8', errors='replace').read()
+    mtext = open(man[0], encoding='utf-8', errors='replace').read()
+    absent = []
+    for label, name in (('device', 'android_device_realme_X2'),
+                        ('vendor', 'android_vendor_realme_X2'),
+                        ('kernel', 'android_kernel_realme_sm6150')):
+        m = re.search(r'name="%s"[^>]*revision="([0-9a-f]{40})"' % re.escape(name), mtext)
+        if not m:
+            continue
+        short = m.group(1)[:8]
+        if short not in text:
+            absent.append(f'{label} pin {short}')
+    chk('C93 PROJECT_CONTEXT.md states the live pins', not absent,
+        ('the state document does not mention ' + ', '.join(absent)
+         + ' — the manifest pins and the document have diverged, so a reader plans against a tree that no'
+         ' longer exists') if absent
+        else 'the state document names every manifest pin')
+
+
+def c94():
+    """Plan records: a status marker must exist, and a [Complete] plan must not still say its outcome is
+    'to be appended' — that contradiction is how three completed plans kept reading as unfinished."""
+    bad = []
+    for f in sorted(glob.glob(f'{ROOT}/docs/*-plan.md')):
+        try:
+            text = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        rel = os.path.basename(f)
+        m = re.search(r'^\s*(?:-\s*)?\*\*Status:?\*\*\s*(.+)$', text, re.M)
+        if not m:
+            bad.append(f'{rel}: no **Status:** marker')
+            continue
+        status = m.group(1)
+        if 'Complete' in status and re.search(r'to be appended|\(appended after execution\)|'
+                                              r'outcome.*pending', text, re.I):
+            bad.append(f'{rel}: marked Complete but its outcome is still a placeholder')
+    chk('C94 plan records carry a status marker consistent with their outcome', not bad,
+        ('; '.join(bad[:4]) + ' — the plan convention is one dated file per plan with a status and an'
+         ' appended outcome; a plan that claims completion while its outcome is a placeholder is a record'
+         ' that lies about itself') if bad
+        else 'every plan record has a status marker and no Complete-with-placeholder contradiction')# Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a
 # gate part numbered ABOVE the entry point would be defined AFTER main() is called -> NameError.

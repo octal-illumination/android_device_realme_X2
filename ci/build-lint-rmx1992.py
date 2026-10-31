@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4239,6 +4239,44 @@ def c100():
          + ' — secilc fails with a neverallow; address the serving DOMAIN instead (that is what the hwservice'
          ' resolves to at runtime)') if bad
         else f'{len(hwtypes)} hwservice type(s) cross-checked against every binder_call in the device policy')
+# Note: This code is purely AI-generated.
+# --- C101: a passthrough <transport> must declare arch ----------------------------------------------
+# History (2026-10-31): the build died in assemble_vintf:
+#   Could not parse element with name <hal> in element <manifest>:
+#   Passthrough HALs requires arch attribute and no ip or port attributes
+# TWO device-manifest entries (android.hardware.health, android.hardware.power) declared
+# <transport>passthrough</transport> with no arch. libvintf's TransportArch.cpp accepts a passthrough
+# transport ONLY when `arch != ARCH_EMPTY` and no ip/port are present, so the whole vendor manifest fails to
+# assemble and EVERYTHING that depends on the VINTF manifest stops with it.
+# Fully decidable from the XML, so it is a gate rather than a memory.
+def c101():
+    mf = f'{DT}/manifest.xml'
+    if not os.path.isfile(mf):
+        info('C101 passthrough transport declares arch', 'device manifest.xml absent')
+        return
+    try:
+        tree = ET.parse(mf)
+    except ET.ParseError as e:
+        chk('C101 passthrough transport declares arch', False,
+            f'device manifest.xml is not well-formed XML: {e}')
+        return
+    bad = []
+    for hal in tree.getroot().findall('hal'):
+        tr = hal.find('transport')
+        if tr is None:
+            continue
+        if (tr.text or '').strip() != 'passthrough':
+            continue
+        name = (hal.findtext('name') or '?').strip()
+        if not tr.get('arch') or tr.get('ip') or tr.get('port'):
+            bad.append(f'{name} (arch={tr.get("arch")!r}'
+                       + (f', ip={tr.get("ip")}' if tr.get('ip') else '')
+                       + (f', port={tr.get("port")}' if tr.get('port') else '') + ')')
+    chk('C101 every passthrough transport declares arch', not bad,
+        (f'{len(bad)} passthrough <transport> without a usable arch: ' + ', '.join(bad[:4])
+         + ' — libvintf rejects the whole device manifest ("Passthrough HALs requires arch attribute and no'
+         ' ip or port attributes"), so assemble_vintf fails and everything downstream of it stops') if bad
+        else f'passthrough transports checked: {sum(1 for h in tree.getroot().findall("hal") if (h.findtext("transport") or "").strip() == "passthrough") or 0}, all declare arch')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

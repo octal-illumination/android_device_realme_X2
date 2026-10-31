@@ -4389,6 +4389,13 @@ def c104():
     if os.path.isfile(bc):
         broken_allowed = bool(re.search(r'^\s*BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES\s*:?=\s*true',
                                         open(bc, encoding='utf-8', errors='replace').read(), re.M))
+    exceptions = set()
+    exf = f'{ROOT}/roms/common/tools/ref/elf-copy-exceptions.txt'
+    if os.path.isfile(exf):
+        for ln in open(exf, encoding='utf-8', errors='replace'):
+            ln = ln.split('#', 1)[0].strip()
+            if ln:
+                exceptions.add(ln)
     bad = []
     checked = 0
     for n, ln in enumerate(open(mk, encoding='utf-8', errors='replace').read().splitlines(), 1):
@@ -4414,7 +4421,12 @@ def c104():
         dest = m.group(3)
         in_lib = bool(re.search(r'(^|/)lib(64)?/', dest))
         if in_lib:
-            bad.append(f'line {n}: {m.group(1)} -> {dest} (library)')
+            # A cited exception beats a blanket rule only when it carries evidence: the ledger below names the
+            # exact source path and why no Soong type can install it. Everything else in a lib path fails.
+            if tail[1] in exceptions:
+                info('C104 ELF copy exception', f'{tail[1]} — cited in ref/elf-copy-exceptions.txt')
+            else:
+                bad.append(f'line {n}: {m.group(1)} -> {dest} (library)')
         elif not broken_allowed:
             bad.append(f'line {n}: {m.group(1)} -> {dest} (set BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES for firmware)')
     chk('C104 no ELF file is installed via PRODUCT_COPY_FILES', not bad,

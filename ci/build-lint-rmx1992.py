@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4108,6 +4108,41 @@ def c96():
         ' now bounded and why — a documented risk with no rule beside it reads as permission, which is how the'
         ' 403 outage happened' if not says_bounded
         else 'the compliance document states the bounded fetch-concurrency rule alongside the risk')
+# Note: This code is purely AI-generated.
+# --- C97: the sanctioned launcher and the build pre-flight must agree on what "sanctioned" means ------
+# History (2026-10-31): `run-durable.sh` was adopted because tmux sessions launched from a non-interactive
+# ssh command die with the connection. `require-sanctioned-launch.sh` still demanded TMUX, so the very next
+# build was refused with "NOT in tmux" -- by our own gate, under our own launcher. Adding one mechanism
+# without reconciling the other produced a state where no launch could satisfy both.
+#
+# This is the same family as C21's pre-push deadlock and C93's pin/doc ordering: a check that is
+# unsatisfiable in the context another part of the system creates. It is decidable, so it is a gate: if a
+# systemd-based launcher exists, the pre-flight must accept a systemd context.
+def c97():
+    pre = f'{ROOT}/roms/common/tools/server/require-sanctioned-launch.sh'
+    if not os.path.isfile(pre):
+        info('C97 launcher and pre-flight agree', 'require-sanctioned-launch.sh absent')
+        return
+    text = open(pre, encoding='utf-8', errors='replace').read()
+    requires_tmux = bool(re.search(r'\$\{TMUX', text))
+    accepts_systemd = bool(re.search(r'INVOCATION_ID|systemd', text))
+    launchers = glob.glob(f'{ROOT}/roms/common/tools/server/run-durable.sh') + \
+                glob.glob(f'{ROOT}/roms/common/tools/server/*durable*')
+    systemd_launcher = bool(launchers) and any(
+        'systemd-run' in open(f, encoding='utf-8', errors='replace').read()
+        for f in launchers if os.path.isfile(f))
+    bad = []
+    if systemd_launcher and requires_tmux and not accepts_systemd:
+        bad.append('require-sanctioned-launch.sh demands TMUX while run-durable.sh launches via systemd-run,'
+                   ' so a durable launch is refused by our own gate')
+    # The converse: if only tmux is accepted, every non-interactive ssh launch is fragile (tmux dies with the
+    # connection). Not a failure by itself, but it must be a conscious state -- reported as INFO.
+    chk('C97 the sanctioned launcher and the build pre-flight agree', not bad,
+        ('; '.join(bad) + ' — a launch context the launcher cannot produce makes the gate unsatisfiable, and'
+         ' the build silently never starts') if bad
+        else 'the launcher and the pre-flight accept the same launch contexts')
+    if requires_tmux and not systemd_launcher:
+        info('C97 launch context', 'only tmux is accepted; durable (systemd) launches are not available')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

@@ -3550,6 +3550,113 @@ def c83():
         else 'no recipe creates directories under $(TARGET_OUT*) — mkdir.mk owns them')
 
 
+# --- C84: no VINTF manifest installed twice on the same partition ---------------------------------
+# Failure #16 (2026-10-31): device/X2/sensors/Android.bp installed its own VINTF fragment while the
+# base installs the byte-identical manifest via copy-vintf-manifest-checked, so Kati aborted with
+#   overriding commands for target `.../vendor/etc/vintf/manifest/android.hardware.sensors@2.0-multihal.xml'
+# The manifest declares the HAL INTERFACE, not our binary, so the base's copy satisfies it.
+# Two traps, each measured before this was written rather than guessed:
+#   * `device/X2/ci/ref/sources/` holds the SWEPT BASE CORPUS. Including it made a first draft report
+#     8 "collisions" that were base-vs-base, and a second draft 15 bogus "missing rc" lines.
+#   * Partition matters: the same `<x>.xml` on odm and on vendor are different install paths.
+# Basenames are the currency — a fragment written `aidl/1.0/nfc-service-nxp.xml` installs as
+# `nfc-service-nxp.xml`, which is the name Kati prints in the error.
+def _vintf_partition(block):
+    if re.search(r'^\s*(vendor|proprietary|soc_specific):\s*true', block, re.M):
+        return 'vendor'
+    if re.search(r'^\s*(device_specific|product_specific):\s*true', block, re.M):
+        return 'odm'
+    if re.search(r'^\s*system_ext_specific:\s*true', block, re.M):
+        return 'system_ext'
+    return 'system'
+
+
+def c84():
+    base = {}
+    for f in glob.glob(f'{ROOT}/roms/common/tools/ref/sources/manifest/*.bp'):
+        for _t, name, block in bp_modules(f):
+            for frag in re.findall(r'vintf_fragments?:\s*\[([^\]]*)\]', block):
+                for x in re.findall(r'"([^"]+\.xml)"', frag):
+                    base.setdefault((_vintf_partition(block), os.path.basename(x)), name)
+    if not base:
+        info('C84 VINTF fragment install collisions',
+             'swept base corpus absent — nothing to compare against')
+        return
+    ours = {}
+    for f in glob.glob(f'{DT}/**/*.bp', recursive=True):
+        if '/ci/' in f:                      # the swept base corpus lives here — it is not ours
+            continue
+        for _t, name, block in bp_modules(f):
+            for frag in re.findall(r'vintf_fragments?:\s*\[([^\]]*)\]', block):
+                for x in re.findall(r'"([^"]+\.xml)"', frag):
+                    ours.setdefault((_vintf_partition(block), os.path.basename(x)),
+                                    f'{name} [{os.path.relpath(f, ROOT)}]')
+    for p in glob.glob(f'{VND}/proprietary/**/etc/vintf/manifest/*.xml', recursive=True):
+        ours.setdefault((p.split('proprietary/')[1].split('/')[0], os.path.basename(p)),
+                        f'shipped blob [{os.path.relpath(p, ROOT)}]')
+    clash = sorted(set(ours) & set(base))
+    chk('C84 no VINTF manifest installed twice on one partition', not clash,
+        (f'{len(clash)} manifest(s) installed by BOTH us and the base on the same partition: '
+         + '; '.join(f'{k[1]} on {k[0]} — ours {ours[k]}, base {base[k]}' for k in clash[:3])
+         + ' — Kati fails with "overriding commands for target .../etc/vintf/manifest/<name>" before'
+         ' a single object is compiled') if clash
+        else f'{len(ours)} of our manifests checked against {len(base)} base install names,'
+             ' no duplicate install path')
+
+
+# --- C85: an rc declared as a module's own init_rc must start that module's binary ----------------
+# Failure #17 (2026-10-31, fixed in c674c6c): sensors/Android.bp declared
+#   init_rc: ["android.hardware.sensors@2.0-service-multihal.rc"]
+# and that rc started /vendor/bin/hw/android.hardware.sensors@2.0-service.multihal — the BASE module's
+# installed path, not ours (ours is ..._x2). The service could never start, and C24 could not see it:
+# the base ships a binary by that name, so its existence check passed. init's contract is that an
+# init_rc belongs to the module declaring it, so it must start that module's own binary (stem-aware).
+# Deliberately NOT gated: the OEM rc files copied verbatim into rootdir/etc (init.qcom.rc et al).
+# Measured, not assumed: 39 of their 105 service lines name binaries the base ships that our vendor
+# harvest does not (dhcpcd, rild, charger, thermals...) — the OEM binary universe on system/odm, not
+# defects. A blanket "we do not produce it" rule would be ~37% noise.
+# bp_modules() strips comments, and that is load-bearing here: a first draft using a naive regex read
+# the COMMENTED-OUT `stem: "...multihal"` note in sensors/Android.bp and reported this very module as a
+# mismatch. Same defect class C69/C70 exist to prevent.
+def c85():
+    rc_files = {}
+    for p in glob.glob(f'{DT}/**/*.rc', recursive=True):
+        if '/ci/' in p:
+            continue
+        rc_files.setdefault(os.path.basename(p), p)
+    checked, bad = 0, []
+    for f in glob.glob(f'{DT}/**/*.bp', recursive=True):
+        if '/ci/' in f:
+            continue
+        for _t, name, block in bp_modules(f):
+            m = re.search(r'init_rc:\s*\[([^\]]*)\]', block)
+            if not m:
+                continue
+            stem = re.search(r'^\s*stem:\s*"([^"]+)"', block, re.M)
+            installed = stem.group(1) if stem else name
+            for src in re.findall(r'"([^"]+)"', m.group(1)):
+                p = rc_files.get(os.path.basename(src))
+                if not p:
+                    continue
+                try:
+                    text = open(p, encoding='utf-8', errors='replace').read()
+                except OSError:
+                    continue
+                starts = [os.path.basename(x) for x in
+                          re.findall(r'^\s*service\s+\S+\s+(\S+)', text, re.M)]
+                if not starts:
+                    continue
+                checked += 1
+                if installed not in starts:
+                    bad.append(f'{os.path.relpath(p, ROOT)} starts '
+                               f'{"/".join(sorted(set(starts)))} but its declaring module '
+                               f'"{installed}" installs that name')
+    chk('C85 a module\'s own init_rc starts that module\'s binary', not bad,
+        ('; '.join(bad[:3]) + ' — init cannot start it: the binary named belongs to a DIFFERENT module'
+         ' (commonly the base\'s), and C24 passes because the base ships a same-named binary') if bad
+        else f'{checked} module/init_rc pair(s) checked, every rc starts its own module\'s binary')
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -3571,7 +3678,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

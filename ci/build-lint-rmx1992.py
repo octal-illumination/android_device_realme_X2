@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4277,6 +4277,42 @@ def c101():
          + ' — libvintf rejects the whole device manifest ("Passthrough HALs requires arch attribute and no'
          ' ip or port attributes"), so assemble_vintf fails and everything downstream of it stops') if bad
         else f'passthrough transports checked: {sum(1 for h in tree.getroot().findall("hal") if (h.findtext("transport") or "").strip() == "passthrough") or 0}, all declare arch')
+# Note: This code is purely AI-generated.
+# --- C102: a failed build log must be FULLY triaged before anything else happens ---------------------
+# History (2026-10-31): twice in a row I fixed the single FAILED target and rebuilt, while the same log also
+# carried a latent defect (depmod could not find modules.order / modules.builtin, i.e. an incomplete module
+# dependency map). The user's instruction was explicit: enumerate every error in the whole log, not just the
+# one that stopped the build, and do it every time. A habit is not a control, so this is the control:
+#
+#   for every archived build log that records a failure, there must be a CURRENT triage report produced by
+#   tools/build-log-triage.py for that exact log. No report (or a stale one) means the previous failure was
+#   never fully read, and the next build would be guesswork.
+def c102():
+    import subprocess
+    logs, missing, stale = [], [], []
+    for d in (f'{ROOT}/logs/build', f'{ROOT}/logs/error'):
+        logs += glob.glob(f'{d}/*.log')
+    for p in sorted(set(logs)):
+        try:
+            tail = open(p, encoding='utf-8', errors='replace').read()[-8000:]
+        except OSError:
+            continue
+        m = re.search(r'BUILD EXIT=(\d+)', tail)
+        failed = (m and m.group(1) != '0') or 'ninja failed' in tail or 'ninja: build stopped' in tail
+        if not failed:
+            continue
+        rep = f'{ROOT}/logs/run/triage-{os.path.basename(p)}.md'
+        if not os.path.isfile(rep):
+            missing.append(os.path.basename(p))
+        elif os.path.getmtime(rep) < os.path.getmtime(p):
+            stale.append(os.path.basename(p))
+    bad = missing + stale
+    chk('C102 every failed build log is fully triaged', not bad,
+        (f'{len(missing)} failed log(s) with NO triage report and {len(stale)} with a stale one: '
+         + ', '.join(bad[:3])
+         + ' — run `python3 roms/common/tools/build-log-triage.py logs/build/<log> --write`; fixing only the'
+         ' first FAILED target is how a latent defect (here: an incomplete depmod map) survives a "fix"') if bad
+        else f'{len(logs)} archived log(s) checked, every failed one has a current triage report')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

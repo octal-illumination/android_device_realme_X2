@@ -4125,7 +4125,10 @@ def c97():
         return
     text = open(pre, encoding='utf-8', errors='replace').read()
     requires_tmux = bool(re.search(r'\$\{TMUX', text))
-    accepts_systemd = bool(re.search(r'INVOCATION_ID|systemd', text))
+    # Resolve the MECHANISM, not the mention: the first version matched the word 'systemd' in a comment,
+    # so neutralising the actual variable left the gate green. Same meta-class as C81 (prose allowlist),
+    # C86 (comment-blind) and C95 (variable indirection): a gate that greps prose is satisfied by prose.
+    accepts_systemd = bool(re.search(r'\$\{INVOCATION_ID', text))
     launchers = glob.glob(f'{ROOT}/roms/common/tools/server/run-durable.sh') + \
                 glob.glob(f'{ROOT}/roms/common/tools/server/*durable*')
     systemd_launcher = bool(launchers) and any(

@@ -3956,6 +3956,12 @@ def c92():
     for md in glob.glob(f'{ROOT}/**/*.md', recursive=True):
         if '/ci/ref/' in md:
             continue
+        # SCOPE (2026-10-31, found by actually reading the CI failure): the doc zone is the PROJECT tree.
+        # The tools repo (`roms/common/tools/`) is a separate repository whose own .md files legitimately have
+        # no .html siblings. In CI that repo IS the workspace, so scanning it produced 41 phantom "stale
+        # siblings" and turned every push red. A gate that fires on the wrong population is noise, not a gate.
+        if '/roms/common/tools/' in md or md.endswith('/roms/common/tools'):
+            continue
         try:
             first = open(md, encoding='utf-8', errors='replace').readline()
         except OSError:

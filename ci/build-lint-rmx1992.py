@@ -3930,9 +3930,19 @@ def c91():
             if 'superseded' in low or 'historical' in low:
                 continue
             for ph in STALE_PHRASES:
-                if ph.lower() in low:
-                    hits.append(f'{name}:{n} "{ph}"')
-                    break
+                if ph.lower() not in low:
+                    continue
+                # USE vs MENTION: a phrase inside backticks or double quotes is being NAMED (e.g. a spec
+                # listing the phrases this gate forbids), not asserted. Flagging that would make the gate
+                # unable to document itself -- the same class of error as C81's prose allowlist.
+                idx = low.find(ph.lower())
+                window = ln[max(0, idx - 1):idx + len(ph) + 1]
+                if window.startswith('`') and window.endswith('`'):
+                    continue
+                if window.startswith('"') and window.endswith('"'):
+                    continue
+                hits.append(f'{name}:{n} "{ph}"')
+                break
     chk('C91 current docs carry no stale outstanding-work claims', not hits,
         (f'{len(hits)} stale claim(s) in reader-facing docs: ' + '; '.join(hits[:4])
          + ' — these phrases assert work is outstanding; when the work lands they must be removed or marked'

@@ -2521,14 +2521,16 @@ def c64():
     chk('C70 no truncating extractors in this lint', not _badshape,
         '; '.join(_badshape[:4]) if _badshape else 'no brace-truncating lookahead or fixed-length window present')
 
-    # C71: the tools copy and the ci (tracked, pushed) copy must be byte-identical
+    # C71: BOTH copies must equal the bundle regenerated from the authored parts
+    # (roms/common/tools/lint/parts/*). Stronger than the old copy-vs-copy compare, which
+    # passed as long as the two files matched -- editing both identically defeated it.
     _drift, _derr = check_lint_copies_in_sync(ROOT)
     if _drift is None:
-        warn('C71 lint copies in sync', _derr)
+        warn('C71 lint bundle currency', _derr)
     else:
-        chk('C71 lint copies in sync (tools == device/X2/ci)', not _drift,
-            ('copies differ: ' + ', '.join(_drift) + ' - the gate lives in ONE copy only')
-            if _drift else 'tools and ci copies are byte-identical')
+        chk('C71 lint copies == bundle(parts)', not _drift,
+            ('; '.join(_drift)) if _drift
+            else 'both copies equal the bundle regenerated from the authored parts')
 
     # C72: every PRODUCT_PACKAGES entry must resolve to a real module
     _unresolved = check_product_packages_resolve(ROOT, f'{ROOT}/roms/common/tools/ref/sources/manifest')
@@ -2954,16 +2956,47 @@ def check_no_truncating_extractors(lint_path):
 # (C65..C70), meaning the guards existed only in an untracked file. A rule that lives in one copy
 # is not a gate. This makes divergence itself a failure.
 def check_lint_copies_in_sync(root):
-    import os as _os, filecmp as _fc
-    a = _os.path.join(root, 'roms/common/tools/build-lint-rmx1992.py')
-    b = _os.path.join(root, 'roms/common/device/X2/ci/build-lint-rmx1992.py')
-    if not _os.path.exists(b):
-        return None, 'ci copy missing'
-    if not _os.path.exists(a):
-        return None, 'tools copy missing'
-    if _fc.cmp(a, b, shallow=False):
-        return [], ''
-    return ([f'size {_os.path.getsize(a)} vs {_os.path.getsize(b)}'], '')
+    """C71: the lint that runs must be the lint we authored.
+
+    Authored source is roms/common/tools/lint/parts/*.py; BOTH copies are generated bundles
+    of it (tools/bundle-lint.py). Regenerating and comparing is strictly stronger than the
+    copy-vs-copy byte compare this replaces, which passed as long as the two files matched --
+    so editing both identically defeated it. Strip logic mirrors tools/bundle-lint.py.
+    """
+    import os as _os, hashlib as _h
+    pdir = _os.path.join(root, 'roms/common/tools/lint/parts')
+    if not _os.path.isdir(pdir):
+        return None, ('authored parts absent (tools repo not in this checkout) - bundle '
+                      'currency is UNVERIFIABLE, not verified')
+    parts = sorted(n for n in _os.listdir(pdir) if n.endswith('.py'))
+    if not parts:
+        return None, 'parts directory is empty'
+    bundle = ''
+    for n in parts:
+        try:
+            body = open(_os.path.join(pdir, n), encoding='utf-8').read()
+        except OSError as e:
+            return None, f'unreadable part {n}: {e}'
+        if body.startswith('# ==== SPLIT-PART'):
+            end = body.find('# ==== END SPLIT-PART ====\n')
+            if end < 0:
+                return None, f'unterminated SPLIT-PART banner in {n}'
+            body = body[end + len('# ==== END SPLIT-PART ====\n'):]
+        bundle += body
+    want = _h.sha256(bundle.encode()).hexdigest()[:12]
+    bad = []
+    for label, rel in (('tools', 'roms/common/tools/build-lint-rmx1992.py'),
+                       ('ci', 'roms/common/device/X2/ci/build-lint-rmx1992.py')):
+        path = _os.path.join(root, rel)
+        if not _os.path.exists(path):
+            bad.append(f'{label} copy missing')
+            continue
+        if open(path, encoding='utf-8').read() != bundle:
+            got = _h.sha256(open(path, 'rb').read()).hexdigest()[:12]
+            bad.append(f'{label} copy STALE: sha {got} != {want} from {len(parts)} authored '
+                       f'parts - edit roms/common/tools/lint/parts/*.py then run '
+                       f'tools/bundle-lint.py --write --ci')
+    return bad, ''
 
 
 # --- C72: every PRODUCT_PACKAGES entry must resolve to a real module ---------------------

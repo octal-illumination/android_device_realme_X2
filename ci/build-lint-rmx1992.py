@@ -3693,7 +3693,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90):
         try:
             fn()
         except Exception as e:  # noqa: BLE001
@@ -3860,6 +3860,39 @@ def c89():
         ('; '.join(bad) + ' — these harnesses are the regression net for the guard and the log'
          ' allocator; if they fail, tooling that gates everything else is itself unverified') if bad
         else f'{ran} harness(es) executed and passed in the pre-submission path')
+
+
+# --- C90: no failure class may be left ungated ----------------------------------------------------
+# The answer to "novel classes cannot be pre-gated". A brand-new failure cannot have a gate before it
+# happens — but it CAN be required to acquire one before the fix is called done. That rule is only real
+# if it is mechanical: the register is the list of known classes, and a row that admits it has no gate
+# is the machine-readable form of "we left a class uncovered". This gate fails on exactly that, so
+# closing a failure without a gate is a lint failure, not a matter of diligence (LL-045: detection was
+# never the gap — the override path was).
+def c90():
+    reg = None
+    for cand in (f'{ROOT}/docs/research/2026-10-29-build-failure-register.md',
+                 f'{ROOT}/roms/docs/research/2026-10-29-build-failure-register.md'):
+        if os.path.isfile(cand):
+            reg = cand
+            break
+    if not reg:
+        info('C90 failure register has no ungated class', 'register absent')
+        return
+    text = open(reg, encoding='utf-8', errors='replace').read()
+    ungated = []
+    for n, ln in enumerate(text.splitlines(), 1):
+        if not ln.strip().startswith('|'):
+            continue
+        m = re.search(r'(\*\*)?(NONE|none|no gate|ungated|gap)(\*\*)?\s*(\||$)', ln)
+        if m and 'gated' not in ln.lower():
+            ungated.append(f'line {n}: {ln.strip()[:90]}')
+    chk('C90 no failure class is left ungated', not ungated,
+        ('the register admits ' + str(len(ungated)) + ' ungated class(es): ' + '; '.join(ungated[:3])
+         + ' — a new failure class cannot have a gate before it happens, but it must acquire one in the'
+         ' change that fixes it; an admitted gap is the machine-readable form of leaving it covered'
+         ' only by diligence') if ungated
+        else 'every failure class in the register maps to a gate')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

@@ -13,9 +13,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// NOTE (Kati failure, 2026-10-31): the module's vintf_fragment_modules / vintf_fragment were
+// REMOVED. The BASE already installs the byte-identical manifest via
+//   $(call copy-vintf-manifest-checked, hardware/interfaces/sensors/2.0/multihal/<same>.xml, ...)
+// so ours produced: overriding commands for target `.../vendor/etc/vintf/manifest/
+// android.hardware.sensors@2.0-multihal.xml'. The manifest declares the HAL INTERFACE, not this
+// binary, so the base's copy satisfies it -- verified identical (md5 986dce24429bf2fcbc39a23f91a4faff).
+// OPEN RUNTIME ITEM: the base's own multihal service is also installed, so two services may claim
+// the sensors HAL. Revisit after the build is green (does not affect compilation).
 cc_binary {
     name: "android.hardware.sensors@2.0-service.multihal_x2",
-    stem: "android.hardware.sensors@2.0-service.multihal",
+    // NOTE (Kati failure, 2026-10-31): this module previously carried
+    //   stem: "android.hardware.sensors@2.0-service.multihal"
+    // which reproduces the BASE module's install path
+    // (hardware/interfaces/sensors/2.0/multihal). Kati aborted with:
+    //   overriding commands for target `.../vendor/bin/hw/android.hardware.sensors@2.0-service.multihal'
+    // The base name appears in NO source .mk, so the second install rule is a side effect of the
+    // stem claiming a name that is itself a module. Dropping the stem gives our X2 build its own
+    // identity and removes the collision; the .rc below was renamed to match.
+    // `overrides:` was tried first and did NOT resolve it (verified).
+    // LINT GAP FOUND: C14/C64 compare module NAMES, so a stem that claims another module's
+    // installed path is invisible to them. New rule C80 compares INSTALLED PATHS.
+    //
+    // RESTORED 2026-10-31: `defaults`, `vendor: true` and `relative_install_path` were
+    // accidentally deleted by an earlier edit of this note (the block between the note and
+    // `srcs:` was replaced wholesale). Without `vendor: true` the module installed to SYSTEM,
+    // which Soong then flagged as a partition mismatch with the vendor vintf_fragment.
     defaults: [
         "hidl_defaults",
     ],
@@ -26,8 +49,7 @@ cc_binary {
         "HalProxyCallback.cpp",
         "service.cpp",
     ],
-    init_rc: ["android.hardware.sensors@2.0-service-multihal.rc"],
-    vintf_fragments: ["android.hardware.sensors@2.0-multihal.xml"],
+    init_rc: ["android.hardware.sensors@2.0-service-multihal_x2.rc"],
     header_libs: [
         "android.hardware.sensors@2.X-multihal.header",
         "android.hardware.sensors@2.X-shared-utils",
@@ -48,3 +70,4 @@ cc_binary {
         "android.hardware.sensors@1.0-convert",
     ],
 }
+

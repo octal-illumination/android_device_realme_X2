@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>2026-10-29-manifest-sweep-report</title>
+  <style>
+  /* Override pandoc default template styles */
+  html{margin:0!important}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;padding:2em;line-height:1.6;color:#1a1a1a;background:#fff;max-width:none!important;width:100%!important}
+  h1,h2,h3,h4{margin-top:1.5em;margin-bottom:0.5em}
+  code{background:#f0f0f0;padding:.2em .4em;border-radius:3px;font-size:.9em}
+  pre code{background:none;padding:0}
+  pre{background:#f5f5f5;padding:1em;border-radius:5px;overflow-x:auto}
+  table{border-collapse:collapse;width:100%;table-layout:fixed}
+  th,td{border:1px solid #ddd;padding:.5em;text-align:left;vertical-align:top;word-wrap:break-word;overflow-wrap:break-word;white-space:normal}
+  th{background:#f0f0f0;font-weight:600;position:sticky;top:0;z-index:1}
+  th:nth-child(1),td:nth-child(1){width:4%;min-width:50px}
+  th:nth-child(2),td:nth-child(2){width:12%;min-width:120px}
+  th:nth-child(3),td:nth-child(3){width:22%;min-width:200px}
+  th:nth-child(4),td:nth-child(4){width:18%;min-width:180px}
+  th:nth-child(5),td:nth-child(5){width:44%;min-width:400px}
+  tr:nth-child(even){background:#fafafa}
+  tr:hover{background:#f0f4f8}
+  a{color:#0366d6}
+  blockquote{border-left:4px solid #ddd;padding-left:1em;color:#666}
+  @media(prefers-color-scheme:dark){
+  body{color:#e1e1e1;background:#1a1a1a}
+  code{background:#2d2d2d}
+  pre{background:#2d2d2d}
+  th{background:#2d2d2d}
+  th,td{border-color:#444}
+  a{color:#58a6ff}
+  blockquote{border-left-color:#555;color:#aaa}
+  tr:nth-child(even){background:#252525}
+  tr:hover{background:#2a2a2a}
+  }
+  /* Pandoc's own extras, kept because the template's default style block is stripped below:
+     these are the visible ones (smallcaps, column layout, pre-wrap code). */
+  code{white-space:pre-wrap}
+  span.smallcaps{font-variant:small-caps}
+  div.columns{display:flex;gap:min(4vw,1.5em)}
+  div.column{flex:auto;overflow-x:auto}
+  </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    document.addEventListener('DOMContentLoaded', () => {
+      // Pandoc outputs <pre class="mermaid"><code>...</code></pre>. 
+      // Mermaid expects the text directly inside the element.
+      document.querySelectorAll('pre.mermaid code').forEach((el) => {
+        const pre = el.parentElement;
+        pre.textContent = el.textContent; // Strip the code tag
+      });
+      mermaid.initialize({ 
+        startOnLoad: true,
+        theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default'
+      });
+    });
+  </script>
+</head>
+<body>
+<div style="background-color: #fff3cd; color: #856404; padding: 10px 15px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #ffeeba; text-align: center; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    ⚠️ Note: All documentation and code in this project are purely AI-generated.
+</div>
+<header id="title-block-header">
+<h1 class="title">2026-10-29-manifest-sweep-report</h1>
+</header>
+<!-- HTML sibling: regenerate ONLY via bash ~/Projects/scripts/generate-docs-html.sh roms/docs/research/2026-10-29-manifest-sweep-report.md — Rule 18c left-aligned CSS. Never hand-roll pandoc. -->
+<h1
+id="manifest-sweep-exhaustive-build-file-corpus-and-collision-findings-complete">Manifest
+sweep — exhaustive build-file corpus and collision findings
+<code>[Complete]</code></h1>
+<blockquote>
+<p><strong>Note:</strong> All documentation and code in this project are
+purely AI-generated.</p>
+</blockquote>
+<p><strong>Run:</strong> 2026-10-29 · <strong>Tool:</strong>
+<code>roms/common/tools/sweep-manifest-sources.py</code> ·
+<strong>Status:</strong> SWEEP COMPLETE</p>
+<h2 id="what-was-swept">1. What was swept</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Manifest projects parsed (default.xml + snippets/lineage.xml)</td>
+<td><strong>1175</strong></td>
+</tr>
+<tr class="even">
+<td>Repos completed</td>
+<td><strong>1112 / 1175</strong></td>
+</tr>
+<tr class="odd">
+<td>Build files cached (<code>Android.bp</code> +
+<code>Android.mk</code>)</td>
+<td><strong>6,259</strong></td>
+</tr>
+<tr class="even">
+<td>Repos truncated by the 500-file cap</td>
+<td><strong>4</strong></td>
+</tr>
+<tr class="odd">
+<td>Cache location</td>
+<td><code>roms/common/tools/ref/sources/manifest/</code> (34 MB)</td>
+</tr>
+<tr class="even">
+<td>Revisions</td>
+<td>the <strong>manifest-pinned</strong> revision per project, not the
+line default</td>
+</tr>
+</tbody>
+</table>
+<p>Coverage caveat, stated rather than implied: <strong>63 repos did not
+complete and 4 were truncated</strong>, so this corpus supports
+<em>FOUND</em> verdicts unconditionally, and <em>ABSENT</em> verdicts
+only for the 1108 fully-swept, untruncated repos.</p>
+<h2 id="why-it-exists">2. Why it exists</h2>
+<p>Three build cycles were lost to defects that a complete corpus
+detects instantly. Every one was an <strong>under-search presented as a
+verified finding</strong>:</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Incident</th>
+<th>What the search was</th>
+<th>What it missed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td><code>libprotobuf-cpp-*-3.9.1</code></td>
+<td><code>external/protobuf</code> only</td>
+<td><code>prebuilts/misc/protobuf_vendorcompat</code> (exists, but
+pruned by <code>PRODUCT_SOURCE_ROOT_DIRS</code>)</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td><code>vendor.display.config@1.0/@2.0</code></td>
+<td>an allowlist entry</td>
+<td>the allowlist was the hiding place</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td><code>libqti_vndfwk_detect</code>,
+<code>libvndfwk_detect_jni.qti</code></td>
+<td>3 caf sm8150 repos + 3 qcom display repos</td>
+<td><strong><code>hardware/qcom-caf/common</code></strong> — which
+builds both as <code>system_ext</code> modules</td>
+</tr>
+</tbody>
+</table>
+<p>Incident 3 <strong>caused the cycle-11 build failure</strong>:
+shipping vendor prebuilts of names the base already defines produced
+<code>partition is different: system_ext(...) != vendor(prebuilt_...)</code>.</p>
+<h2 id="findings-from-the-corpus-20249-distinct-base-module-names">3.
+Findings from the corpus (20,249 distinct base module names)</h2>
+<h3 id="partition-mismatch-the-class-that-aborts-the-build">3.1
+Partition mismatch — the class that aborts the build</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Module</th>
+<th>Ours</th>
+<th>Base</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>com.dsi.ant@1.0</code></td>
+<td>vendor</td>
+<td>system</td>
+</tr>
+<tr class="even">
+<td><code>librmnetctl</code></td>
+<td>vendor</td>
+<td>system</td>
+</tr>
+<tr class="odd">
+<td><code>libstdc++</code></td>
+<td>odm</td>
+<td>system</td>
+</tr>
+</tbody>
+</table>
+<p>All three match the incident-3 signature and would abort the build
+the same way.</p>
+<h3 id="same-name-pairs-with-the-base-4-needs-adjudication">3.2
+Same-name pairs with the base (4, needs adjudication)</h3>
+<p><code>android.hardware.gnss@{1.1,2.1}-impl-qti</code> and
+<code>android.hardware.gnss@{1.1,2.1}-service-qti</code> are defined
+<strong>both</strong> by our device tree
+(<code>gps/android/*/Android.mk</code>) <strong>and</strong> by the base
+(<code>hardware/qcom/sm8150/gps/android/*/Android.bp</code>).</p>
+<p>Status: <strong>UNCERTAIN, not a confirmed failure.</strong> Both
+repos declare a <code>soong_namespace</code>, which can make same-name
+modules legal across namespaces — but incident 3 shows prebuilt/source
+resolution crosses namespace boundaries for the partition check. This
+must be adjudicated from Soong semantics or a build,
+<strong>not</strong> guessed.</p>
+<h3 id="module-type-divergence-40-pairs-mostly-benign">3.3 Module-type
+divergence (40 pairs) — mostly benign</h3>
+<p><code>cc_prebuilt_library_shared</code> (ours) vs
+<code>cc_library_shared</code> (base) is the <strong>legal</strong>
+prebuilt-over-source pattern: <code>camera.device@*-impl</code>,
+<code>libbundlewrapper</code>, <code>libbluetooth_audio_session</code>,
+etc. One pair is <em>not</em> benign by inspection:
+<code>com.dsi.ant@1.0</code> — ours is a prebuilt library, the base
+defines it as a <code>hidl_interface</code>.</p>
+<h3 id="property-key-collision-1-minor">3.4 Property-key collision (1,
+minor)</h3>
+<p><code>ro.charger.enable_suspend</code> is set in both
+<code>product.prop</code> and <code>system.prop</code>.</p>
+<h3 id="classes-checked-and-found-clean">3.5 Classes checked and found
+CLEAN</h3>
+<ul>
+<li>install-path collisions across 866 modules / 968 install paths —
+<strong>0</strong></li>
+<li><code>PRODUCT_COPY_FILES</code> destination collisions —
+<strong>0</strong></li>
+<li>duplicate module names <em>within</em> our own files —
+<strong>0</strong></li>
+<li><code>shared_libs</code> / <code>static_libs</code> /
+<code>header_libs</code> resolution (C61) — all 546 resolve</li>
+<li>ELF <code>DT_NEEDED</code> closure over 968 blobs (C60) — 0
+executable-blocking</li>
+</ul>
+<h2 id="durable-rule-this-enables">4. Durable rule this enables</h2>
+<p>The corpus makes the collision class checkable against the
+<strong>whole base</strong> rather than a guess at where to look. That
+check belongs in the lint (proposed <strong>C64</strong>), reading the
+swept corpus, so a partition collision can never again pass
+silently.</p>
+<h2 id="reproduce">5. Reproduce</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> roms/common/tools/sweep-manifest-sources.py <span class="at">--workers</span> 12   <span class="co"># resumable</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> roms/common/tools/deep-search-module.py <span class="at">--module</span> <span class="op">&lt;</span>name<span class="op">&gt;</span>    <span class="co"># coverage-enforced verdicts</span></span></code></pre></div>
+</body>
+</html>

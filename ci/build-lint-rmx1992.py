@@ -3471,6 +3471,85 @@ def c81():
         else f'none of {len(set(prefer))} prefer:true module(s) shadows a base source module')
 
 
+# --- C82: our installed names must not collide with a base module that uses `stem:` ---------------
+# History (2026-10-31): the protobuf packaging failure. Base's hardware/lineage/compat declares
+#   cc_prebuilt_library_shared { name: "libprotobuf-cpp-full-3.9.1-vendorcompat",
+#                                stem: "libprotobuf-cpp-full-3.9.1" }
+# so base installs vendor/lib64/libprotobuf-cpp-full-3.9.1.so. Our prebuilt installed the SAME path
+# under a DIFFERENT module name, so every name-based collision check missed it and Soong aborted with
+# "packaging / overriding commands for target .../libprotobuf-cpp-full-3.9.1.so". The vendor
+# Android.bp comment claimed "Rule C80 implements this"; C80 was never written. This is it.
+# Install-path uniqueness is the invariant; the module NAME is a proxy that fails when stems are used.
+def c82():
+    sweep = sorted(glob.glob(f'{ROOT}/roms/common/tools/ref/sources/manifest/*.bp'))
+    if not sweep:
+        info('C82 base stem install-name collision',
+             'sweep corpus absent — run tools/sweep-manifest-sources.py')
+        return
+    stems = {}
+    for f in sweep:
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        # Split at top-level declarators so each chunk is one module block; regexing the chunk is
+        # robust against nested braces (target: { ... }) in a way a brace-balanced regex is not.
+        for block in re.split(r'(?m)^(?=[A-Za-z_]\w*\s*\{)', t):
+            nm = re.search(r'name:\s*"([^"]+)"', block)
+            st = re.search(r'stem:\s*"([^"]+)"', block)
+            if not (nm and st):
+                continue
+            # Only a vendor/odm install can collide with our blobs. Without this the gate flagged
+            # ndk_libc++_shared (an ndk_prebuilt_shared_stl installs into the NDK sysroot, not a
+            # device partition) against our odm/lib64/libc++_shared.so — a false positive.
+            if not re.search(r'(vendor|proprietary|soc_specific|device_specific):\s*true', block):
+                continue
+            stems.setdefault(st.group(1), nm.group(1))
+    ours = set()
+    for p in glob.glob(f'{VND}/proprietary/**/*.so', recursive=True):
+        b = os.path.basename(p)
+        ours.add(b[:-3] if b.endswith('.so') else b)
+    if os.path.isfile(f'{VND}/Android.bp'):
+        t = open(f'{VND}/Android.bp', encoding='utf-8', errors='replace').read()
+        ours |= set(re.findall(r'^\s*stem:\s*"([^"]+)"', t, re.M))
+        ours |= set(re.findall(r'^\s*name:\s*"([^"]+)"', t, re.M))
+    clash = sorted(n for n in ours if n in stems)
+    chk('C82 no install-name collision with a base `stem:` module', not clash,
+        (f'{len(clash)} of our installed name(s) collide with a base module that installs the same'
+         ' file under a different module name: '
+         + ', '.join(f'{n} (base {stems[n]})' for n in clash[:5])
+         + ' — Soong aborts with "packaging / overriding commands for target", and no name-based'
+         ' check can see it') if clash
+        else f'{len(stems)} base stem install-names checked, none collides with ours')
+
+
+# --- C83: no recipe may create a directory under $(TARGET_OUT*) ----------------------------------
+# History (2026-10-31): device/X2/Android.mk carried the classic "A/B builds require us to create the
+# mount points at compile time" block (firmware_mnt / bt_firmware / dsp). On lineage-23.2 those
+# directories are created by vendor/lineage/build/core/mkdir.mk, which is Soong-owned, so the manual
+# recipe produced:
+#   error: overriding commands for target 'out/target/product/X2/vendor/firmware_mnt',
+#          previously defined at vendor/lineage/build/core/mkdir.mk:22
+# Kati fails the entire parse before a single object is compiled — but only after a queue cycle.
+def c83():
+    bad = []
+    for f in glob.glob(f'{DT}/**/*.mk', recursive=True) + glob.glob(f'{VND}/*.mk'):
+        try:
+            lines = open(f, encoding='utf-8', errors='replace').read().splitlines()
+        except OSError:
+            continue
+        for n, ln in enumerate(lines, 1):
+            if ln.lstrip().startswith('#'):
+                continue
+            if re.search(r'mkdir\s+-p\s+\$\(TARGET_OUT', ln):
+                bad.append(f'{os.path.relpath(f, ROOT)}:{n}')
+    chk('C83 no recipe creates a directory under $(TARGET_OUT*)', not bad,
+        (f'{len(bad)} recipe line(s) create build-owned output directories: ' + ', '.join(bad[:5])
+         + ' — on lineage-23.2 vendor/lineage/build/core/mkdir.mk owns those targets and Kati fails'
+         ' with "overriding commands for target"') if bad
+        else 'no recipe creates directories under $(TARGET_OUT*) — mkdir.mk owns them')
+
+
 def main():
     global DECLARED_LINE, LINE_MISMATCH
     DECLARED_LINE = declared_build_line()
@@ -3492,7 +3571,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83):
         try:
             fn()
         except Exception as e:  # noqa: BLE001

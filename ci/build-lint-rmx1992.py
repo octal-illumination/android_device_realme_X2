@@ -413,14 +413,19 @@ def c23():
         # Not in our modules, not in base, not in interface/caf caches — is it in the dump?
         dump_path = f'/tmp/rmx_pp/vendor-trust/f26_dump/odm/lib64/{stem}.so'
         if os.path.isfile(dump_path):
-            dump_available.append(f'{lib} → EXISTS IN DUMP but not listed (add to proprietary-files.txt!)')
+            dump_available.append(
+                f'{lib} → EXISTS IN DUMP but not listed — resolvable via '
+                f'our_modules / BASE_LIBS / combined_cache / device_tree_modules '
+                f'(this gate does NOT read proprietary-files.txt)')
         else:
             # check other partitions
             found = False
             for part_dir in ['vendor/lib64', 'system_ext/lib64', 'odm/lib', 'vendor/lib', 'system_ext/lib']:
                 if os.path.isfile(f'/tmp/rmx_pp/vendor-trust/f26_dump/{part_dir}/{stem}.so'):
                     found = True
-                    dump_available.append(f'{lib} → EXISTS IN DUMP at {part_dir} but not listed')
+                    dump_available.append(
+                        f'{lib} → EXISTS IN DUMP at {part_dir} but not listed — '
+                        f'add it to the matching ref/ cache with a citation')
                     break
             if not found:
                 unresolved.append(lib)

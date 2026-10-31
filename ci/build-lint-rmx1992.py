@@ -3678,7 +3678,7 @@ def main():
         print('    base_module_universe.txt, override_pairs.txt) and re-run')
         print('    tools/enumerate-base-modules.py before trusting collision rules.')
         print('=' * 78)
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89):
         try:
             fn()
         except Exception as e:  # noqa: BLE001
@@ -3687,6 +3687,170 @@ def main():
     print(f'RESULT: {len(fails)} FAIL, {len(warns)} WARN, {len(infos)} INFO')
     sys.exit(1 if fails else 0)
 
+# Note: This code is purely AI-generated.
+# --- C86: every reference to a gate must name a gate that EXISTS ---------------------------------
+# History (2026-10-31): vendor/realme/Android.bp cited "Rule C80" in FOUR comments, covering four
+# different mechanisms. C80 was never written, so the file advertised coverage that did not exist --
+# worse than no note, because a note asserts enforcement and a reader (or agent) therefore does not
+# re-check the class. Recorded as SPECIFICATION.md LL-048.
+# A line is exempt only if it explicitly states the gate does NOT exist (e.g. "never written"): that
+# is not a coverage claim, it is the opposite, and it is how the history stays traceable.
+def c86():
+    bundle = f'{ROOT}/roms/common/tools/build-lint-rmx1992.py'
+    if not os.path.isfile(bundle):
+        info('C86 gate references resolve', 'lint bundle absent — cannot enumerate gates')
+        return
+    text = open(bundle, encoding='utf-8', errors='replace').read()
+    # f-string aware: C2 is emitted as chk(f'C2 dup modules [...]', ...) — a plain '...' pattern misses it
+    implemented = set(re.findall(r"(?:chk|warn|info)\(\s*f?'(C\d{1,3})\b", text))
+    if not implemented:
+        info('C86 gate references resolve', 'no gate ids found in the bundle — parser drift?')
+        return
+    ref = re.compile(r'(?:(?:[Rr]ule|[Ll]int|[Gg]uarded by|[Gg]ate|[Gg]ates)\s+(C\d{1,3})\b'
+                     r'|\((C\d{1,3})\))')
+    # A line is exempt only if it explicitly says the gate does NOT exist. Note the phrasing must be
+    # broad enough for real prose ("had never BEEN written") — and deliberately does NOT include bare
+    # words like "gap", which would let a genuine missing-gate claim slip through.
+    historical = re.compile(r'never\s+(?:been\s+)?written|never\s+existed|did\s+not\s+exist|'
+                            r'does\s+not\s+exist|no\s+such\s+gate|phantom\s+rule|not\s+implemented', re.I)
+    targets = []
+    for pat in (f'{DT}/**/*.bp', f'{DT}/**/*.mk', f'{DT}/**/*.rc', f'{DT}/**/*.txt',
+                f'{DT}/**/*.xml', f'{VND}/Android.bp', f'{VND}/*.mk', f'{VND}/proprietary-files.txt',
+                f'{ROOT}/roms/common/tools/**/*.py', f'{ROOT}/roms/common/tools/**/*.sh',
+                f'{ROOT}/roms/common/tools/**/*.md', f'{ROOT}/*.md', f'{ROOT}/docs/**/*.md',
+                f'{ROOT}/roms/docs/**/*.md'):
+        targets += glob.glob(pat, recursive=True)
+    bad, checked = [], 0
+    for f in targets:
+        if '/ci/' in f or '/kernel' in f or '/proprietary/' in f or '/sources/' in f:
+            continue
+        if '/logs/' in f:                      # ledgers are append-only history: retired ids allowed
+            continue
+        if os.path.basename(f) == 'build-lint-rmx1992.py':
+            continue                           # generated artifact; the parts are the source of truth
+        try:
+            lines = open(f, encoding='utf-8', errors='replace').read().splitlines()
+        except OSError:
+            continue
+        for n, ln in enumerate(lines, 1):
+            for m in ref.finditer(ln):
+                gid = m.group(1) or m.group(2)
+                if not gid or gid in implemented:
+                    continue
+                checked += 1
+                # Comments wrap, so the marker often sits on the next line — look at both.
+                if historical.search(ln) or (n < len(lines) and historical.search(lines[n])):
+                    continue
+                bad.append(f'{os.path.relpath(f, ROOT)}:{n} cites {gid} (no such gate)')
+    chk('C86 every gate cross-reference names an implemented gate', not bad,
+        (f'{len(bad)} reference(s) cite a gate that does not exist: ' + '; '.join(bad[:4])
+         + f' — the gate ids that exist are the {len(implemented)} emitted by chk/warn/info in the'
+         ' bundle; a comment claiming a missing gate asserts coverage that is not there (LL-048)') if bad
+        else f'{len(implemented)} implemented gate ids; every cross-reference in the tree resolves')
 
+
+# --- C87: ledgers live in exactly one place -------------------------------------------------------
+# History (2026-10-31): the ledgers had drifted into THREE divergent copies (project root, logs/,
+# roms/logs/), so each looked current while Audit-CHANGELOG was stale in all three and no single file
+# showed the whole state (SPECIFICATION.md LL-049). Consolidated into the project-root logs/.
+# Deliberate exceptions: docs/research/researched-ideas.md (the research index, canonical there), the
+# separate kernel-bridge-root project (its own logs/), and vendored corpora / kernel sources, which
+# ship their own CHANGELOG files as part of upstream trees we do not own.
+def c87():
+    names = ('CHANGELOG.md', 'Audit-CHANGELOG.md', 'Action-History.md', 'commands-log.md',
+             'output-history.md', 'SESSION_STATE.md', 'STATE-CLAIMS.md', 'researched-ideas.md')
+    canonical = f'{ROOT}/logs'
+    exempt = ('/ci/', '/kernel', '/sources/', 'kernel-bridge-root', 'kernel-src', '/docs/research/',
+              '/archived/', '/tmp/', '/third_party/', '/external/', '/.git/')
+    strays = []
+    for nm in names:
+        for p in glob.glob(f'{ROOT}/**/{nm}', recursive=True):
+            if p.startswith(canonical + os.sep):
+                continue
+            if any(x in p for x in exempt):
+                continue
+            strays.append(os.path.relpath(p, ROOT))
+    chk('C87 no ledger exists outside the canonical logs/', not strays,
+        (f'{len(strays)} ledger file(s) outside `logs/`: ' + ', '.join(sorted(strays)[:5])
+         + ' — divergent copies mean no single file shows the whole state, and each copy looks current'
+         ' while one of them silently goes stale (LL-049)') if strays
+        else f'all {len(names)} ledger names live only under logs/')
+# Note: This code is purely AI-generated.
+# --- C88: the state documents must not be stale ---------------------------------------------------
+# History (2026-10-31): PROJECT_CONTEXT.md still described job `307833` as QUEUED three days after it
+# stopped existing, and named a 56-gate lint when the suite had 97. Rule 12a makes that file the FIRST
+# thing every agent reads, so the error propagates straight into the next session's plan. Recorded as
+# SPECIFICATION.md LL-049: a stale state document is worse than a missing one, because people act on it.
+# Two mechanical checks: (a) a job id named there must appear in recent ledger history, (b) its
+# "Last Updated" date must not trail the newest ledger entry.
+def c88():
+    pc = f'{ROOT}/PROJECT_CONTEXT.md'
+    led = f'{ROOT}/logs/CHANGELOG.md'
+    if not os.path.isfile(pc) or not os.path.isfile(led):
+        info('C88 state documents are current', 'PROJECT_CONTEXT.md or logs/CHANGELOG.md absent')
+        return
+    pct = open(pc, encoding='utf-8', errors='replace').read()
+    ledt = open(led, encoding='utf-8', errors='replace').read()
+    sections = re.split(r'^## ', ledt, flags=re.M)[1:]
+    recent = '\n'.join(sections[-50:])
+    recent_ids = set(re.findall(r'\b(\d{6})\b', recent))
+    cited = set(re.findall(r'\b(\d{6})\b', pct))
+    # 8-digit SHAs are not job ids; the 6-digit pattern already excludes them
+    orphan = sorted(i for i in cited if i not in recent_ids)
+    bad = []
+    if orphan:
+        bad.append('names job id(s) absent from the newest 50 ledger entries: ' + ', '.join(orphan))
+    m_new = None
+    for s in reversed(sections):
+        d = re.match(r'(\d{4}-\d{2}-\d{2})', s)
+        if d:
+            m_new = d.group(1)
+            break
+    m_pc = re.search(r'Last Updated\D{0,60}(\d{4}-\d{2}-\d{2})', pct, re.S)
+    if m_new and m_pc:
+        if m_pc.group(1) < m_new:
+            bad.append(f'"Last Updated" is {m_pc.group(1)} but the newest ledger entry is {m_new}')
+    chk('C88 the state documents are not stale', not bad,
+        ('; '.join(bad) + ' — PROJECT_CONTEXT.md is the first file an agent reads, so a stale claim'
+         ' there becomes the next session\'s plan (LL-049); update it in the change that moves the'
+         ' state, not afterwards') if bad
+        else f'state docs consistent with the newest ledger entry ({m_new or "n/a"})')
+
+
+# --- C89: the tooling's own test harnesses must pass ----------------------------------------------
+# History (2026-10-31): tests/run-guard-tests.sh and tests/test-log-write-once.sh existed, but NOTHING
+# invoked them -- their only references were documentation. So a change that broke the log allocator
+# (my own scp/$HOME defect briefly left build.sh calling a missing script) could ship without any test
+# noticing. Walking the tests into the pre-submission path is what makes them a gate instead of a note.
+def c89():
+    tests = [('guard fixtures', f'{ROOT}/roms/common/tools/tests/run-guard-tests.sh'),
+             ('write-once log', f'{ROOT}/roms/common/tools/tests/test-log-write-once.sh')]
+    ran, bad = 0, []
+    for label, path in tests:
+        if not os.path.isfile(path):
+            bad.append(f'{label}: harness missing ({os.path.relpath(path, ROOT)})')
+            continue
+        try:
+            import subprocess
+            r = subprocess.run(['bash', path], cwd=f'{ROOT}/roms/common/tools',
+                               capture_output=True, text=True, timeout=180)
+        except Exception as e:                                            # noqa: BLE001
+            bad.append(f'{label}: could not run ({type(e).__name__})')
+            continue
+        ran += 1
+        if r.returncode != 0:
+            tail = (r.stdout or r.stderr or '').strip().splitlines()[-2:]
+            bad.append(f'{label}: exit {r.returncode} — ' + ' | '.join(t.strip() for t in tail))
+    chk('C89 the tooling harnesses pass', not bad,
+        ('; '.join(bad) + ' — these harnesses are the regression net for the guard and the log'
+         ' allocator; if they fail, tooling that gates everything else is itself unverified') if bad
+        else f'{ran} harness(es) executed and passed in the pre-submission path')
+# Note: This code is purely AI-generated.
+# --- entry point ---------------------------------------------------------------------------------
+# This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a
+# gate part numbered ABOVE the entry point would be defined AFTER main() is called -> NameError.
+# That is exactly what happened on 2026-10-31 when C86-C89 were added as parts 021/022: the run died
+# with "NameError: name 'c86' is not defined" even though the bundler reported success.
+# Keep new gate parts numbered 021-998. Add the new gate to the run tuple in part 020 as well.
 if __name__ == '__main__':
     main()

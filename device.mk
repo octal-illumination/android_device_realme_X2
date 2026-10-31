@@ -336,8 +336,8 @@ PRODUCT_PACKAGES += \
 
 # Protobuf
 PRODUCT_PACKAGES += \
-    libprotobuf-cpp-full-3.9.1 \
-    libprotobuf-cpp-lite-3.9.1
+    libprotobuf-cpp-full-3.9.1-vendorcompat \
+    libprotobuf-cpp-lite-3.9.1-vendorcompat
 
 # QMI
 PRODUCT_PACKAGES += \
@@ -366,6 +366,13 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/privapp-permissions-qti.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp-permissions-qti.xml
 
 # RIL
+# NOTE (build failure, 2026-10-31): libreference-ril (added unconditionally by
+# base_vendor.mk) fails to compile: upstream omits header_libs ["ril_headers"], so
+# telephony/ril_cdma_sms.h is not found. A PRODUCT_PACKAGES filter-out here is a NO-OP
+# because base_vendor.mk is inherited LATER (via media_vendor.mk) and re-adds it.
+# Fix applied instead: a build-tree patch adding header_libs to the module, recorded in
+# roms/lineage/manifests PATCHES and applied by the build command. The X2 uses Qualcomm's
+# vendor RIL (qcril); the reference RIL is never loaded at runtime.
 PRODUCT_PACKAGES += \
     android.hardware.radio@1.5.vendor \
     android.hardware.radio.config@1.2.vendor \

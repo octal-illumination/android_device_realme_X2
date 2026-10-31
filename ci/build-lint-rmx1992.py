@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4201,6 +4201,44 @@ def c99():
          + ' — the source module\'s exported headers disappear with it, so consumers break at compile time')
         if bad else
         f'{len(dev_headers)} device-tree header module(s) checked, none shadowed by a prebuilt')
+# Note: This code is purely AI-generated.
+# --- C100: sepolicy must not binder_call a hwservice_manager_type -----------------------------------
+# History (2026-10-31): the build died in secilc with
+#   neverallow ... (binder (impersonate call set_context_mgr transfer))
+# because device/realme/X2/sepolicy/vendor/hal_secure_element_default.te contained
+#   binder_call(hal_secure_element_default, nfc_hwservice)
+# Modern AOSP forbids binder call/transfer TO a hwservice_manager_type. A hwservice is served by a DOMAIN,
+# and that domain is what policy must address. The rule was an Android-11-era leftover and cost a build cycle
+# at 52%.
+#
+# This is decidable from our own tree: the hwservice types are declared here (`type X, hwservice_manager_type`),
+# so any binder grant targeting one of them is checkable statically.
+def c100():
+    se = f'{DT}/sepolicy'
+    if not os.path.isdir(se):
+        info('C100 no binder_call to a hwservice type', 'device sepolicy absent')
+        return
+    hwtypes = set()
+    for p in glob.glob(f'{se}/**/*.te', recursive=True):
+        t = open(p, encoding='utf-8', errors='replace').read()
+        hwtypes |= set(re.findall(r'type\s+([a-z0-9_]+)\s*,\s*hwservice_manager_type', t))
+    if not hwtypes:
+        info('C100 no binder_call to a hwservice type', 'no hwservice_manager_type declared here')
+        return
+    bad = []
+    for p in glob.glob(f'{se}/**/*.te', recursive=True):
+        lines = open(p, encoding='utf-8', errors='replace').read().splitlines()
+        for n, ln in enumerate(lines, 1):
+            if ln.lstrip().startswith('#'):
+                continue
+            m = re.search(r'binder_call\(\s*([a-z0-9_]+)\s*,\s*([a-z0-9_]+)\s*\)', ln)
+            if m and m.group(2) in hwtypes:
+                bad.append(f'{os.path.relpath(p, ROOT)}:{n} binder_call({m.group(1)}, {m.group(2)})')
+    chk('C100 sepolicy must not binder_call a hwservice type', not bad,
+        (f'{len(bad)} binder_call(s) target a hwservice_manager_type: ' + '; '.join(bad[:3])
+         + ' — secilc fails with a neverallow; address the serving DOMAIN instead (that is what the hwservice'
+         ' resolves to at runtime)') if bad
+        else f'{len(hwtypes)} hwservice type(s) cross-checked against every binder_call in the device policy')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

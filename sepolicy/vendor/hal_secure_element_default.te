@@ -1,2 +1,6 @@
 allow hal_secure_element_default nfc_hwservice:hwservice_manager { find add };
-binder_call(hal_secure_element_default, nfc_hwservice)
+# NOTE (2026-10-31, neverallow): modern policy forbids binder call/transfer TO a hwservice_manager_type
+# (system/sepolicy/private/domain.te: "neverallow ... (binder (impersonate call set_context_mgr transfer))").
+# The hwservice is served by the NFC HAL's domain, so address that instead of the hwservice type. The
+# find/add grant above is what locates the service and stays unchanged.
+binder_call(hal_secure_element_default, hal_nfc_default)

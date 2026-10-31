@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4065,7 +4065,7 @@ def c95():
                 continue
             for v in unbounded_vars:
                 if re.search(r'-j\"?\$\{?%s' % re.escape(v), ln):
-                    bad_unbounded.append(f'{rel}:{n} (-j\${v}, and {v} is $(nproc))')
+                    bad_unbounded.append(f'{rel}:{n} (-j{v}... where {v} resolves to $(nproc))')
         if 'repo sync' in text and not text.lstrip().startswith('#'):
             has_sync = any(('repo sync' in ln and not ln.lstrip().startswith('#'))
                            for ln in text.splitlines())
@@ -4146,6 +4146,61 @@ def c97():
         else 'the launcher and the pre-flight accept the same launch contexts')
     if requires_tmux and not systemd_launcher:
         info('C97 launch context', 'only tmux is accepted; durable (systemd) launches are not available')
+# Note: This code is purely AI-generated.
+# --- C98: a prefer:true prebuilt must not shadow a module OUR OWN DEVICE TREE defines ---------------
+# History (2026-10-31): the build died linking `libgeofencing` with undefined `loc_core`/`loc_util` symbols.
+# Cause: `vendor/realme/X2/Android.bp` declared `libloc_core` with `prefer: true`, so Soong DISCARDED the
+# source module our device tree builds in `device/realme/X2/gps/core/Android.bp` — and the F.26 prebuilt does
+# not export a single one of the three symbols the device tree's own code calls. A sweep with the sanctioned
+# parser found **13** such pairs (3 GPS, 9 audio-HAL, 1 fingerprint HAL); only the GPS one had failed yet.
+#
+# C81 already covers this mechanism but its universe is `base_module_universe.txt` — modules the BASE tree
+# defines. The device tree is a third producer, and no gate looked at it. That blind spot is this rule.
+def c98():
+    if not os.path.isfile(f'{VND}/Android.bp'):
+        info('C98 prebuilt does not shadow our device tree', 'vendor Android.bp absent')
+        return
+    dev = {}
+    for p in glob.glob(f'{DT}/**/*.bp', recursive=True):
+        if '/ci/' in p:
+            continue
+        for _t, name, block in bp_modules(p):
+            dev[name] = os.path.relpath(p, ROOT)
+    if not dev:
+        info('C98 prebuilt does not shadow our device tree', 'no device-tree modules found')
+        return
+    vend = {name: block for _t, name, block in bp_modules(f'{VND}/Android.bp')}
+    shadow = sorted(n for n in set(dev) & set(vend) if re.search(r'prefer:\s*true', vend[n]))
+    chk('C98 a vendor prebuilt must not shadow a device-tree source module', not shadow,
+        (f'{len(shadow)} prebuilt(s) carry prefer:true while our device tree also builds that module: '
+         + ', '.join(f'{n} (device: {dev[n]})' for n in shadow[:4])
+         + ' — prefer:true makes Soong discard the source module, so the device tree\'s own code links an'
+         ' OEM-era .so that may not export the symbols it calls (that is exactly how libgeofencing failed)')
+        if shadow else
+        f'{len(dev)} device-tree modules checked against {len(vend)} vendor prebuilts, no shadowing')
+
+
+# --- C99: a vendor prebuilt must not shadow a device-tree module's HEADERS either -------------------
+# The symbol failure above happened at LINK time. The same preference also drops `export_include_dirs`,
+# which is what C81 documents for the base case (a module losing its exported headers). Reported separately
+# so the two mechanisms are not conflated when only one is present.
+def c99():
+    if not os.path.isfile(f'{VND}/Android.bp'):
+        return
+    dev_headers = set()
+    for p in glob.glob(f'{DT}/**/*.bp', recursive=True):
+        if '/ci/' in p:
+            continue
+        for _t, name, block in bp_modules(p):
+            if name.endswith('_headers') or re.search(r'^export_include_dirs', block, re.M):
+                dev_headers.add(name)
+    vend = {name: block for _t, name, block in bp_modules(f'{VND}/Android.bp')}
+    bad = sorted(n for n in dev_headers & set(vend) if re.search(r'prefer:\s*true', vend[n]))
+    chk('C99 a vendor prebuilt must not shadow a device-tree header module', not bad,
+        (f'{len(bad)} header module(s) shadowed: ' + ', '.join(bad[:4])
+         + ' — the source module\'s exported headers disappear with it, so consumers break at compile time')
+        if bad else
+        f'{len(dev_headers)} device-tree header module(s) checked, none shadowed by a prebuilt')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

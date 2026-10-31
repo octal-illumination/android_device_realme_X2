@@ -99,6 +99,43 @@ def declared_build_line():
 # the wrong line (e.g. lineage-24.0 while the bake builds lineage-23.2) passed happily. That is how
 # a fix was committed+pushed to 24.0 and a 12-15h cycle was wasted. C0 now compares every repo
 # against the line declared in roms/BUILD_TARGET, plus the manifests revision pins.
+def push_state(repo_path):
+    """How far HEAD is from its remote-tracking branch. Deliberately OFFLINE.
+
+    The bake clones GitHub, so a commit that was never pushed is invisible to it while the lint
+    (which validates the working tree) is perfectly happy — "clean" and "ready to build" are not
+    the same claim. Reads local remote-tracking refs only, so verdicts are "as of the last fetch";
+    git ls-remote here would make the gate hang or fail without a network.
+
+    Returns (state, detail) with state in {ok, ahead, behind, diverged, unknown}.
+    """
+    def git(*args):
+        try:
+            r = subprocess.run(['git', '-C', repo_path] + list(args),
+                               capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:      # noqa: BLE001 - a gate must never crash the run
+            return None
+    branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+    if not branch or branch == 'HEAD':
+        return 'unknown', 'detached HEAD'
+    up = git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}') or f'origin/{branch}'
+    local, remote = git('rev-parse', 'HEAD'), git('rev-parse', up)
+    if not local or not remote:
+        return 'unknown', f'no remote-tracking ref for {up}'
+    if local == remote:
+        return 'ok', up
+    counts = git('rev-list', '--left-right', '--count', f'{up}...HEAD')
+    if counts:
+        behind, ahead = (counts.split() + ['0', '0'])[:2]
+        if ahead != '0' and behind != '0':
+            return 'diverged', f'{ahead} unpushed / {behind} unpulled vs {up}'
+        if ahead != '0':
+            return 'ahead', f'{ahead} unpushed commit(s) vs {up}'
+        return 'behind', f'{behind} unpulled commit(s) vs {up}'
+    return 'diverged', f'HEAD differs from {up}'
+
+
 def c0():
     if not os.path.isdir(f'{DT}/.git'):
         print('SKIP  C0 build-line conformance — not a git checkout (snapshot/export mode)')
@@ -177,6 +214,9 @@ def c0():
     if dirty:
         warn('C0 uncommitted changes before submission', ', '.join(dirty) +
              ' — the bake builds what GitHub has, NOT your working tree')
+        # NOTE (2026-10-31): "HEAD was never pushed" is a DIFFERENT invariant and already has its
+        # own gate — C21 branch tip sync, which FAILs on it. Duplicating it here as a WARN would be
+        # two gates for one invariant; C21 was instead extended to cover all four ROM repos.
 
 
 # --- C1: BoardConfig 2ND-arch rule (verbatim base table, combo/TARGET_linux-arm.mk @lineage-23.2) ---
@@ -371,7 +411,17 @@ def c23():
             if not _line or _line.startswith('#'):
                 continue
             syslib_cache.update(_line.split())
-    combined_cache = iface_cache | caf_cache | syslib_cache
+    # 2026-10-31: the enumerated base module universe belongs here too. It was the only base list
+    # C23 did NOT consult, so dropping a prebuilt that base provides (libbluetooth_audio_session)
+    # made C23 report "EXISTS IN DUMP but not listed" for a name that IS a base module. C60 and C61
+    # already treat the universe as authoritative for "base provides it"; this makes C23 consistent
+    # instead of requiring yet another hand-written cache entry per dropped prebuilt.
+    universe_cache = set()
+    universe_path = f'{ROOT}/roms/common/tools/ref/base_module_universe.txt'
+    if os.path.isfile(universe_path):
+        universe_cache = {ln.split()[0] for ln in open(universe_path)
+                          if ln.strip() and not ln.startswith('#')}
+    combined_cache = iface_cache | caf_cache | syslib_cache | universe_cache
 
     # Names our own DEVICE TREE builds from source (C23 blind-spot fix 2026-10-28: deps
     # must resolve against these too — else the tooling force-adds redundant prebuilts,
@@ -1635,18 +1685,25 @@ def c20():
 
 # --- C21: branch tip sync ---
 def c21():
-    drift = []
-    for path, label in [(DT, 'device'), (VND, 'vendor')]:
-        local = subprocess.run(['git', '-C', path, 'rev-parse', 'HEAD'],
-                               capture_output=True, text=True).stdout.strip()
-        branch = subprocess.run(['git', '-C', path, 'branch', '--show-current'],
-                                capture_output=True, text=True).stdout.strip()
-        if branch:
-            remote = subprocess.run(['git', '-C', path, 'rev-parse', f'origin/{branch}'],
-                                    capture_output=True, text=True).stdout.strip()
-            if local != remote:
-                drift.append(f'{label}: local {local[:8]} != remote {remote[:8]}')
-    chk('C21 branch tip sync', not drift, '; '.join(drift))
+    # 2026-10-31: extended from device+vendor to EVERY ROM repo. The bake clones all four from
+    # GitHub, so a kernel or manifests commit that was never pushed is exactly as invisible to it as
+    # an unpushed device change. Uses push_state() so the verdict says how far off it is
+    # (ahead / diverged) instead of only "differs"; 'behind' is not drift (the bake builds remote)
+    # and 'unknown' means there is no remote-tracking ref to compare against.
+    drift, unknown = [], []
+    for label, path in (('device', DT), ('vendor', VND),
+                        ('kernel', KERNEL), ('manifests', MANIFESTS)):
+        state, detail = push_state(path)
+        if state in ('ahead', 'diverged'):
+            drift.append(f'{label}: {detail}')
+        elif state == 'unknown':
+            unknown.append(f'{label}: {detail}')
+    chk('C21 branch tip sync', not drift,
+        ('; '.join(drift) + ' — push, or the bake silently builds older code') if drift
+        else 'every ROM repo tip matches its remote-tracking branch')
+    if unknown:
+        info('C21 push state unverifiable',
+             ', '.join(unknown) + ' — no remote-tracking ref; fetch before trusting this')
 
 
 # --- C22: lineage.dependencies branch matches build line ---

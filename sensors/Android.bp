@@ -33,7 +33,7 @@ cc_binary {
     // identity and removes the collision; the .rc below was renamed to match.
     // `overrides:` was tried first and did NOT resolve it (verified).
     // LINT GAP FOUND: C14/C64 compare module NAMES, so a stem that claims another module's
-    // installed path is invisible to them. New rule C80 compares INSTALLED PATHS.
+    // installed path is invisible to them. New rule C82 compares INSTALLED PATHS.
     //
     // RESTORED 2026-10-31: `defaults`, `vendor: true` and `relative_install_path` were
     // accidentally deleted by an earlier edit of this note (the block between the note and

@@ -225,7 +225,7 @@ vendor/lib64/libsoc_helper.so
 vendor/lib64/libsoc_helper_jni.so
 vendor/lib64/libsubsystem_control.so
 vendor/lib64/libtzdrmgenprov.so
-vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so;MODULE_SUFFIX=_vendor
+# [removed 2026-10-31: BASE provides it -> packaging conflict in /vendor] vendor/lib64/vendor.qti.hardware.camera.postproc@1.0.so;MODULE_SUFFIX=_vendor
 
 # Camera-arcsoft
 odm/lib64/libarcsoft_beautyshot.so
@@ -318,14 +318,14 @@ vendor/etc/camera/mwStereoParams.bin
 vendor/etc/camera/skinSeg.model
 
 # Camera device
-vendor/lib64/camera.device@1.0-impl.so
-vendor/lib64/camera.device@3.2-impl.so
-vendor/lib64/camera.device@3.3-impl.so
-vendor/lib64/camera.device@3.4-external-impl.so
-vendor/lib64/camera.device@3.4-impl.so
-vendor/lib64/camera.device@3.5-external-impl.so
-vendor/lib64/camera.device@3.5-impl.so
-vendor/lib64/camera.device@3.6-external-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@1.0-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.2-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.3-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.4-external-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.4-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.5-external-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.5-impl.so
+# [removed 2026-10-31: AOSP source impl provides it; F.26 prebuilt lacks A16-ABI CameraDevice symbols] vendor/lib64/camera.device@3.6-external-impl.so
 
 # Camera hardware
 odm/etc/camera/asd/class.dlc
@@ -1458,7 +1458,7 @@ vendor/lib64/com.dsi.ant@1.0.so
 vendor/lib64/libWaterMark.so
 # [C14-removed] vendor/lib64/libavservices_minijail.so  (base builds from source — partition collision)
 vendor/lib64/libbluetooth_audio_session.so
-vendor/lib64/libcld80211.so
+# [removed 2026-10-31: CAF source provides it; F.26 prebuilt lacks cld80211_get_nl_socket_ctx] vendor/lib64/libcld80211.so
 # [C14-removed] vendor/lib64/libcodec2_vndk.so  (base builds from source — partition collision)
 vendor/lib64/libcom.oppo.calidatacontainer.so
 # [C14-removed] vendor/lib64/libdrm.so  (base builds from source — partition collision)
@@ -1484,10 +1484,10 @@ vendor/lib64/vendor.qti.hardware.trustedui@1.0.so
 vendor/lib64/libcamera_core_hwi.so
 # [C14-removed] vendor/lib64/libeffectsconfig.so  (base builds from source — partition collision)
 vendor/lib64/librilutils.so
-vendor/lib/libprotobuf-cpp-full-3.9.1.so
-vendor/lib/libprotobuf-cpp-lite-3.9.1.so
-vendor/lib64/libprotobuf-cpp-full-3.9.1.so
-vendor/lib64/libprotobuf-cpp-lite-3.9.1.so
+# [removed 2026-10-31: BASE provides it via hardware/lineage/compat -> duplicate /vendor path] vendor/lib/libprotobuf-cpp-full-3.9.1.so
+# [removed 2026-10-31: BASE provides it via hardware/lineage/compat -> duplicate /vendor path] vendor/lib/libprotobuf-cpp-lite-3.9.1.so
+# [removed 2026-10-31: BASE provides it via hardware/lineage/compat -> duplicate /vendor path] vendor/lib64/libprotobuf-cpp-full-3.9.1.so
+# [removed 2026-10-31: BASE provides it via hardware/lineage/compat -> duplicate /vendor path] vendor/lib64/libprotobuf-cpp-lite-3.9.1.so
 # [C14-removed] vendor/lib64/libstagefright_bufferpool@2.0.1.so  (base builds from source — partition collision)
 odm/lib64/vendor.oplus.hardware.bluetooth_audio@1.0.so
 vendor/lib/libStDrvInt.so|daea5be20f666076d0f82262a9a8b46e4cc51158

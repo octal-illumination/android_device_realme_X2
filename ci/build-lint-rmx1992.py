@@ -22,6 +22,12 @@ import xml.etree.ElementTree as ET
 ROOT = os.environ.get('X2_LINT_ROOT') or os.path.expanduser('~/Projects/android/devices/rmx1992')
 DT = os.environ.get('X2_LINT_DT') or f'{ROOT}/roms/common/device/X2'
 VND = os.environ.get('X2_LINT_VND') or f'{ROOT}/roms/common/vendor/realme'
+
+# Set by the git pre-push hook (tools/git-hooks/pre-push). Mid-push, "everything is pushed" (C21) and
+# "the tree is clean" (C0) are unsatisfiable BY CONSTRUCTION -- you are pushing right now -- so those two
+# report INFO instead of FAIL/WARN. Without this the hook deadlocks: C21 says "push this", and the hook
+# refuses the push because C21 failed. Every other gate keeps full force during a push.
+PRE_PUSH = os.environ.get('X2_LINT_PRE_PUSH') == '1'
 DUMP = os.environ.get('X2_LINT_DUMP') or '/run/media/user/My Passport/RMX1992EX/vendor-trust/f26_dump'  # NO /tmp rule
 fails, warns, infos = [], [], []
 
@@ -212,8 +218,12 @@ def c0():
         if r.stdout.strip():
             dirty.append(name)
     if dirty:
-        warn('C0 uncommitted changes before submission', ', '.join(dirty) +
-             ' — the bake builds what GitHub has, NOT your working tree')
+        msg = ', '.join(dirty) + ' — the bake builds what GitHub has, NOT your working tree'
+        if PRE_PUSH:
+            info('C0 uncommitted changes before submission (pre-push)',
+                 msg + ' [pre-push run: expected while pushing, checked for real before a build]')
+        else:
+            warn('C0 uncommitted changes before submission', msg)
         # NOTE (2026-10-31): "HEAD was never pushed" is a DIFFERENT invariant and already has its
         # own gate — C21 branch tip sync, which FAILs on it. Duplicating it here as a WARN would be
         # two gates for one invariant; C21 was instead extended to cover all four ROM repos.
@@ -1698,9 +1708,14 @@ def c21():
             drift.append(f'{label}: {detail}')
         elif state == 'unknown':
             unknown.append(f'{label}: {detail}')
-    chk('C21 branch tip sync', not drift,
-        ('; '.join(drift) + ' — push, or the bake silently builds older code') if drift
-        else 'every ROM repo tip matches its remote-tracking branch')
+    msg = ('; '.join(drift) + ' — push, or the bake silently builds older code') if drift \
+        else 'every ROM repo tip matches its remote-tracking branch'
+    if drift and PRE_PUSH:
+        # Mid-push this is unsatisfiable by definition — that IS the push in progress. Reporting it as
+        # INFO avoids a hook that deadlocks (C21 says "push"; the hook refuses because C21 failed).
+        info('C21 branch tip sync (pre-push)', msg + ' [pre-push run: the commit being pushed]')
+    else:
+        chk('C21 branch tip sync', not drift, msg)
     if unknown:
         info('C21 push state unverifiable',
              ', '.join(unknown) + ' — no remote-tracking ref; fetch before trusting this')

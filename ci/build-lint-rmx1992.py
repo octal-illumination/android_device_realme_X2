@@ -3696,7 +3696,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4026,6 +4026,89 @@ def c94():
          ' appended outcome; a plan that claims completion while its outcome is a placeholder is a record'
          ' that lies about itself') if bad
         else 'every plan record has a status marker and no Complete-with-placeholder contradiction')# Note: This code is purely AI-generated.
+# --- C95: GitHub FETCH concurrency must be bounded, and access failures must be classified -------------
+# History (2026-10-31): `repo sync -c -j$(nproc --all)` (192 parallel fetches) tripped GitHub's abuse
+# mitigation, which then returned **HTTP 403 for every request from the build host's IP** — including our own
+# public repos. The outage blocked the build. SERVERHIVE-COMPLIANCE.md had ALREADY stated the risk ("the cost
+# of an unguarded -j192 sync is losing our access"); the risk was documented, accepted, and then taken four
+# times in one day. Documentation is not enforcement, which is why this is a gate.
+#
+# Two mechanical rules, both decidable from the scripts themselves:
+#   1. a `repo sync` in our tooling must not derive its -j from $(nproc) — that is BUILD guidance being
+#      applied to FETCH concurrency; the two have nothing in common;
+#   2. a script that runs `repo sync` must also classify 403/429 and must not retry it in a loop, because
+#      retrying an access block is what deepens it.
+def c95():
+    files = []
+    for pat in (f'{ROOT}/roms/common/tools/*.sh', f'{ROOT}/roms/common/tools/server/*',
+                f'{ROOT}/roms/common/tools/*.canonical', f'{ROOT}/roms/common/tools/server/*.canonical'):
+        files += glob.glob(pat)
+    bad_unbounded, bad_unclassified = [], []
+    for f in sorted(set(files)):
+        if not os.path.isfile(f) or f.endswith('.py'):
+            continue
+        try:
+            text = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        rel = os.path.relpath(f, ROOT)
+        # BLIND SPOT FOUND BY NEGATIVE TESTING (2026-10-31): checking only the `repo sync` line misses the
+        # value when it is moved into a variable -- `repo sync -c -j"$JOBS"` is bounded on that line whatever
+        # JOBS holds, and a refactor to a command array hides it entirely. So resolve the job variable too.
+        job_vars = set(re.findall(r'^\s*([A-Z_]*JOBS[A-Z_]*)=(.+)$', text, re.M))
+        unbounded_vars = {v for v, val in job_vars if re.search(r'nproc', val)}
+        for n, ln in enumerate(text.splitlines(), 1):
+            if 'repo sync' not in ln or ln.lstrip().startswith('#'):
+                continue
+            if re.search(r'-j"?\$\(nproc', ln) or re.search(r'-j"\$\((nproc)', ln):
+                bad_unbounded.append(f'{rel}:{n} (nproc on the sync line)')
+                continue
+            for v in unbounded_vars:
+                if re.search(r'-j\"?\$\{?%s' % re.escape(v), ln):
+                    bad_unbounded.append(f'{rel}:{n} (-j\${v}, and {v} is $(nproc))')
+        if 'repo sync' in text and not text.lstrip().startswith('#'):
+            has_sync = any(('repo sync' in ln and not ln.lstrip().startswith('#'))
+                           for ln in text.splitlines())
+            if has_sync and not re.search(r'40\[39\]|403|429|REFUSED ACCESS|rate limit', text):
+                bad_unclassified.append(rel)
+    bad = bad_unbounded + bad_unclassified
+    chk('C95 GitHub fetch concurrency bounded and access failures classified', not bad,
+        (f'{len(bad_unbounded)} unbounded `repo sync -j$(nproc…)` and {len(bad_unclassified)} script(s) that'
+         ' sync without classifying 403/429: ' + ', '.join(bad[:4])
+         + ' — 192 parallel fetches earned an IP-level 403 block across every repo; a retry loop deepens it,'
+         ' so bound the jobs and classify the failure before retrying') if bad
+        else 'fetch concurrency is bounded and every syncing script classifies access failures')
+
+
+# --- C96: the compliance document must not advertise a risk we just took -------------------------------
+# SERVERHIVE-COMPLIANCE.md stated the -j192 risk and simultaneously recorded that the guard ceiling was
+# RETIRED, so nothing prevented the exact action the document warned about. A risk that is documented but
+# unblocked reads as permission. This gate keeps the two in step: if the document names the risk, the fetch
+# concurrency must be bounded in the scripts (which C95 proves) — and the document must say so where it
+# previously said the ceiling was merely retired.
+def c96():
+    comp = f'{ROOT}/roms/SERVERHIVE-COMPLIANCE.md'
+    if not os.path.isfile(comp):
+        info('C96 compliance doc states the fetch-concurrency rule', 'SERVERHIVE-COMPLIANCE.md absent')
+        return
+    text = open(comp, encoding='utf-8', errors='replace').read()
+    mentions_risk = bool(re.search(r'losing our access|403|-j192', text))
+    if not mentions_risk:
+        info('C96 compliance doc states the fetch-concurrency rule', 'no access-risk statement found')
+        return
+    # Proximity matters: a rule that lives anywhere in the file still lets the risk paragraph read as
+    # permission. Require the rule within ~15 lines of the risk statement (found by negative testing: the
+    # first version passed because SYNC_JOBS appeared elsewhere in the document).
+    lines = text.splitlines()
+    risk_idx = [i for i, l in enumerate(lines) if re.search(r'losing our access|error: 403|-j192', l)]
+    window = '\n'.join(l for i in risk_idx for l in lines[max(0, i - 15):i + 15])
+    says_bounded = bool(re.search(r'bounded fetch|SYNC_JOBS|fetch concurrency is (now )?bounded', window, re.I))
+    chk('C96 compliance doc states the fetch-concurrency rule', says_bounded,
+        'SERVERHIVE-COMPLIANCE.md still describes the high job count without stating that FETCH concurrency is'
+        ' now bounded and why — a documented risk with no rule beside it reads as permission, which is how the'
+        ' 403 outage happened' if not says_bounded
+        else 'the compliance document states the bounded fetch-concurrency rule alongside the risk')
+# Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a
 # gate part numbered ABOVE the entry point would be defined AFTER main() is called -> NameError.

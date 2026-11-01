@@ -4358,10 +4358,11 @@ def c102():
         except OSError:
             continue
         rep = f'{ROOT}/logs/run/triage-{h}.md'
+        # Reports are keyed by CONTENT HASH, so a report for this content is valid regardless of when the
+        # mirror last re-copied the file. Comparing mtimes against the copy (which the hourly mirror touches)
+        # marked byte-identical logs as stale — the same false alarm that made this rule fire four times.
         if not os.path.isfile(rep):
             missing.append(os.path.basename(p))
-        elif os.path.getmtime(rep) < os.path.getmtime(p):
-            stale.append(os.path.basename(p))
     bad = missing + stale
     chk('C102 every failed build log is fully triaged', not bad,
         (f'{len(missing)} failed log(s) with NO triage report and {len(stale)} with a stale one: '

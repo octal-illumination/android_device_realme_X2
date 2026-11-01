@@ -4455,50 +4455,56 @@ def c104():
          'prebuilt_rfsa type for DSP blobs) with filename_from_src to keep the exact name') if bad
         else f'{checked} copied file(s) checked by magic bytes, none is ELF')
 # Note: This code is purely AI-generated.
-# --- C105: a prebuilt's DT_NEEDED must be declared in its shared_libs (mirror of the build's ELF check) ---
-# History (2026-10-31): four build cycles were spent discovering prebuilt ELF problems the platform validates
-# with out/host/linux-x86/bin/check_elf_file:
+# --- C105: a prebuilt's DT_NEEDED must be declared, and its DT_SONAME must match the installed name -----
+# History (2026-10-31/11-01): four build cycles were spent on problems the platform validates offline with
+# out/host/linux-x86/bin/check_elf_file:
 #   error: DT_NEEDED "libstdc++.so" is not specified in shared_libs.
 #   error: Unresolved symbol: AHardwareBuffer_allocate@LIBNATIVEWINDOW
-# Each cycle surfaced a few and the next cycle surfaced more; a sweep found 36 modules with undeclared
-# DT_NEEDED. The check is decidable offline: parse each prebuilt's dynamic section and compare its NEEDED
-# entries with the module's declared shared_libs (module names, or a base-provided soname).
+#   error: DT_SONAME "libaisd.so" must be equal to the file name "libOPLUS_aisd.so".
+# A sweep measured 36 prebuilts with undeclared DT_NEEDED -- the build was surfacing four per cycle. Both the
+# dependency check and the SONAME check are decidable here, so both live in this gate.
 #
-# ELF parsing is done here rather than shelling out to readelf, so the gate works anywhere the lint runs.
-def _elf_needed(path):
-    """Return the DT_NEEDED sonames of an ELF file. Uses readelf: my first attempt parsed the binary by hand and
-    read DT_STRTAB as a FILE OFFSET when it is a VIRTUAL ADDRESS, producing garbage sonames -- hand-rolling a
-    binary format parser is exactly the kind of "clever" shortcut that wastes a debugging cycle. readelf exists
-    on every dev VM and on the CI image; if it is absent the gate reports INFO rather than guessing."""
+# readelf is used rather than a hand-rolled ELF parser: my first attempt read DT_STRTAB as a FILE OFFSET when it
+# is a VIRTUAL ADDRESS, producing garbage sonames and a gate that "found" nonsense.
+def _elf_meta(path):
+    """(needed_sonames, soname) for an ELF file, or (None, None) if it is not a readable ELF."""
     import shutil
     import subprocess
     if not shutil.which('readelf'):
-        return None
+        return None, None
     try:
-        head = open(path, 'rb').read(4)
+        with open(path, 'rb') as fh:
+            if fh.read(4) != b'\x7fELF':
+                return None, None
     except OSError:
-        return None
-    if head != b'\x7fELF':
-        return None
+        return None, None
     try:
-        out = subprocess.run(['readelf', '-d', path], capture_output=True, text=True, timeout=60)
+        out = subprocess.run(['readelf', '-d', path], capture_output=True, text=True, timeout=120).stdout
     except (OSError, subprocess.SubprocessError):
-        return None
-    return re.findall(r'NEEDED.*\[([^\]]+)\]', out.stdout)
+        return None, None
+    needed = re.findall(r'NEEDED.*\[([^\]]+)\]', out)
+    m = re.search(r'SONAME.*\[([^\]]+)\]', out)
+    return needed, (m.group(1) if m else None)
 
 
 def c105():
     if not os.path.isfile(f'{VND}/Android.bp'):
-        info('C105 prebuilt DT_NEEDED declared', 'vendor Android.bp absent')
+        info('C105 prebuilt ELF declarations', 'vendor Android.bp absent')
         return
+    # only modules that are INSTALLED get the platform's check_elf_file; an unbuilt module would be noise
+    installed = set()
+    mkm = f'{VND}/X2-vendor.mk'
+    if os.path.isfile(mkm):
+        for ln in open(mkm, encoding='utf-8', errors='replace'):
+            t = ln.strip().rstrip('\\').strip()
+            if t and not t.startswith('#') and ' ' not in t and ':=' not in t and '+=' not in t:
+                installed.add(t)
     base_provided = set()
     for name in ('base_system_libraries.txt', 'base_core_modules.txt', 'base_module_universe.txt'):
         f = f'{ROOT}/roms/common/tools/ref/{name}'
         if os.path.isfile(f):
             base_provided |= {ln.strip() for ln in open(f, encoding='utf-8', errors='replace')
                               if ln.strip() and not ln.startswith('#')}
-    # A soname already cited in the C104 exception ledger (with its evidence) is satisfied here too: the same
-    # fact should not have to be re-litigated per gate. Anything NOT cited still fails.
     excepted = set()
     exf = f'{ROOT}/roms/common/tools/ref/elf-copy-exceptions.txt'
     if os.path.isfile(exf):
@@ -4508,51 +4514,48 @@ def c105():
             path, _, reason = ln.partition('#')
             if len(reason.strip()) >= 20:
                 excepted.add(os.path.basename(path.strip()))
-    # Only modules that are actually INSTALLED get the platform's check_elf_file. A module left in Android.bp
-    # but absent from PRODUCT_PACKAGES is never built, so reporting it would be noise (and would force us to
-    # delete definitions purely to satisfy a gate).
-    installed = set()
-    mkm = f'{VND}/X2-vendor.mk'
-    if os.path.isfile(mkm):
-        for ln in open(mkm, encoding='utf-8', errors='replace'):
-            t = ln.strip().rstrip('\\').strip()
-            if t and not t.startswith('#') and ' ' not in t and ':=' not in t and '+=' not in t:
-                installed.add(t)
+
     bad, checked = [], 0
-    for _t, name, block in bp_modules(f'{VND}/Android.bp'):
-        if _t != 'cc_prebuilt_library_shared':
+    for mtype, name, block in bp_modules(f'{VND}/Android.bp'):
+        if mtype != 'cc_prebuilt_library_shared':
             continue
         if installed and name not in installed:
             continue
+        if re.search(r'^\s*check_elf_files:\s*false', block, re.M):
+            continue                     # the module opts out of the platform check, so nothing to mirror
         libs = set()
         for m in re.finditer(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
             libs |= set(re.findall(r'"([^"]+)"', m.group(1)))
+        srcs = []
         for m in re.finditer(r'srcs:\s*\[([^\]]*)\]', block, re.S):
-            for src in re.findall(r'"([^"]+)"', m.group(1)):
-                path = f'{VND}/{src}' if not src.startswith('/') else src
-                needed = _elf_needed(path)
-                if not needed:
+            srcs += re.findall(r'"([^"]+)"', m.group(1))
+        stem_m = re.search(r'^\s*stem:\s*"([^"]+)"', block, re.M)
+        for src in srcs:
+            path = f'{VND}/{src}' if not src.startswith('/') else src
+            needed, soname = _elf_meta(path)
+            if needed is None:
+                continue
+            checked += 1
+            # Soong appends '.so' to a stem, so `stem: "libmmosal"` installs libmmosal.so and matches a
+            # SONAME of libmmosal.so. Comparing the bare stem produced 9 false mismatches.
+            installed_name = (stem_m.group(1) + '.so') if stem_m else os.path.basename(src)
+            if soname and soname != installed_name:
+                bad.append(f'{name}: DT_SONAME {soname} != installed {installed_name} (add stem:)')
+            for son in needed:
+                stem = re.sub(r'\.so(\.\d+)*$', '', son)
+                if stem in libs or son in libs:
                     continue
-                checked += 1
-                for son in needed:
-                    # Strip a TRAILING '.so' plus any version suffix: 'libc++.so.1' -> 'libc++',
-                    # 'libfoo.so.2' -> 'libfoo'. NOT split('.so'), which matched the '.so' inside '.soter' and
-                    # truncated 'vendor.qti.hardware.soter@1.0.so' to 'vendor.qti.hardware' (caught by running
-                    # the gate's own logic against the real module).
-                    stem = re.sub(r'\.so(\.\d+)*$', '', son)
-                    if stem in libs or son in libs:
-                        continue
-                    if stem in base_provided or son in base_provided:
-                        continue
-                    if son in excepted or (son.split('.so')[0] + '.so') in excepted:
-                        continue
-                    bad.append(f'{name}: needs {son}')
-                break
+                if stem in base_provided or son in base_provided:
+                    continue
+                if son in excepted or (stem + '.so') in excepted:
+                    continue
+                bad.append(f'{name}: needs {son}')
+            break
     chk('C105 a prebuilt declares every DT_NEEDED library', not bad,
-        (f'{len(bad)} undeclared dependency(ies) across prebuilts: ' + '; '.join(bad[:4])
-         + ' — the platform fails the module with "DT_NEEDED ... is not specified in shared_libs" and names'
-         ' the fix; catching it here costs a second instead of a build cycle') if bad
-        else f'{checked} prebuilt(s) checked, every DT_NEEDED entry is declared or base-provided')
+        (f'{len(bad)} problem(s) across installed prebuilts: ' + '; '.join(bad[:4])
+         + ' — the platform fails the module at check_elf_file and prints the fix; catching it here costs a'
+         ' second instead of a build cycle') if bad
+        else f'{checked} installed prebuilt(s) checked: DT_NEEDED declared and DT_SONAME matches')
 # Note: This code is purely AI-generated.
 # --- C106: module-level properties must not be nested directly under `target:` -------------------------
 # History (2026-10-31): a scripted edit inserted `shared_libs: [...]` directly under `target: {` instead of at

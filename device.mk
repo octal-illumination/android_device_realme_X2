@@ -200,9 +200,6 @@ PRODUCT_PACKAGES += \
     gnss@2.0-xtwifi-inet-agent.policy
 
 PRODUCT_PACKAGES += \
-    libbatching \
-    libgeofencing \
-    libgnss
 
 PRODUCT_PACKAGES += \
     libgnsspps \

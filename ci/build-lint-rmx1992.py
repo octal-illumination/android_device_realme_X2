@@ -4184,6 +4184,17 @@ def c97():
 # C81 already covers this mechanism but its universe is `base_module_universe.txt` — modules the BASE tree
 # defines. The device tree is a third producer, and no gate looked at it. That blind spot is this rule.
 def c98():
+    # A shadowing we chose deliberately is only acceptable with evidence: ref/prebuilt-shadow-exceptions.txt
+    # names the module and why the OEM ABI must win (here: the whole OEM GNSS stack depends on it).
+    allowed = set()
+    le = f'{ROOT}/roms/common/tools/ref/prebuilt-shadow-exceptions.txt'
+    if os.path.isfile(le):
+        for ln in open(le, encoding='utf-8', errors='replace'):
+            if ln.lstrip().startswith('#') or not ln.strip():
+                continue
+            name_part, _, reason = ln.partition('#')
+            if len(reason.strip()) >= 40:
+                allowed.add(name_part.strip())
     if not os.path.isfile(f'{VND}/Android.bp'):
         info('C98 prebuilt does not shadow our device tree', 'vendor Android.bp absent')
         return
@@ -4197,7 +4208,7 @@ def c98():
         info('C98 prebuilt does not shadow our device tree', 'no device-tree modules found')
         return
     vend = {name: block for _t, name, block in bp_modules(f'{VND}/Android.bp')}
-    shadow = sorted(n for n in set(dev) & set(vend) if re.search(r'prefer:\s*true', vend[n]))
+    shadow = sorted(n for n in set(dev) & set(vend) if re.search(r'prefer:\s*true', vend[n]) and n not in allowed)
     chk('C98 a vendor prebuilt must not shadow a device-tree source module', not shadow,
         (f'{len(shadow)} prebuilt(s) carry prefer:true while our device tree also builds that module: '
          + ', '.join(f'{n} (device: {dev[n]})' for n in shadow[:4])
@@ -4212,6 +4223,17 @@ def c98():
 # which is what C81 documents for the base case (a module losing its exported headers). Reported separately
 # so the two mechanisms are not conflated when only one is present.
 def c99():
+    # A shadowing we chose deliberately is only acceptable with evidence: ref/prebuilt-shadow-exceptions.txt
+    # names the module and why the OEM ABI must win (here: the whole OEM GNSS stack depends on it).
+    allowed = set()
+    le = f'{ROOT}/roms/common/tools/ref/prebuilt-shadow-exceptions.txt'
+    if os.path.isfile(le):
+        for ln in open(le, encoding='utf-8', errors='replace'):
+            if ln.lstrip().startswith('#') or not ln.strip():
+                continue
+            name_part, _, reason = ln.partition('#')
+            if len(reason.strip()) >= 40:
+                allowed.add(name_part.strip())
     if not os.path.isfile(f'{VND}/Android.bp'):
         return
     dev_headers = set()
@@ -4222,7 +4244,7 @@ def c99():
             if name.endswith('_headers') or re.search(r'^export_include_dirs', block, re.M):
                 dev_headers.add(name)
     vend = {name: block for _t, name, block in bp_modules(f'{VND}/Android.bp')}
-    bad = sorted(n for n in dev_headers & set(vend) if re.search(r'prefer:\s*true', vend[n]))
+    bad = sorted(n for n in dev_headers & set(vend) if re.search(r'prefer:\s*true', vend[n]) and n not in allowed)
     chk('C99 a vendor prebuilt must not shadow a device-tree header module', not bad,
         (f'{len(bad)} header module(s) shadowed: ' + ', '.join(bad[:4])
          + ' — the source module\'s exported headers disappear with it, so consumers break at compile time')

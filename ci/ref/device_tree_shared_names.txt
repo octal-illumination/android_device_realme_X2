@@ -3,7 +3,11 @@
 # Legal soong prebuilt-over-source overrides (same partition); C56 guards NEW pairs.
 # C23 also resolves deps against these (device-tree-provided), preventing forced prebuilt adds
 # (the blind spot that created the android.hidl.base@1.0 prebuilt in the 38-blob round).
-libgps.utils  <- device/X2/gps/utils (vendor:true source) vs our vendor prebuilt (prefer: ours)
+libgps.utils  <- device/X2/gps/utils (vendor:true source) vs our vendor prebuilt (prefer: SOURCE, flipped 2026-11-02)
+#   why: the F.26 blob exports loc_read_conf/loc_read_conf_r but NOT loc_read_conf_long or
+#   get_tag_log_level, both of which the device source defines; libgnsspps links the headers from
+#   device/X2/gps/utils, so the prebuilt could not satisfy it. Evidence: readelf -sW --dyn-syms on
+#   proprietary/vendor/lib64/libgps.utils.so + logs/CHANGELOG.md 2026-11-02.
 libloc_core   <- device/X2/gps/core   (vendor:true source) vs our vendor prebuilt
 liblocation_api <- device/X2/gps/location (vendor:true source) vs our vendor prebuilt
 vendor.oplus.hardware.biometrics.fingerprint@2.1 <- device/X2/interfaces hidl_interface (device.mk packages it) vs our odm prebuilt

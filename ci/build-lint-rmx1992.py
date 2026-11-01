@@ -4550,6 +4550,33 @@ def c105():
             if len(reason.strip()) >= 20:
                 excepted.add(os.path.basename(path.strip()))
 
+    def _variant_libs(block):
+        """What Soong actually applies: an arch-specific shared_libs list REPLACES the module-level list for
+        that arch. Merging every list (previous behaviour) let a module whose list sat only inside
+        android_arm64 pass here while its 32-bit variant had no list at all — exactly the gap build
+        20261101_231638 reported for 9 modules (libssc, libsnsdiaglog, libsensorslog, libsns_fastRPC_util,
+        libmiracastsystem, vendor.oplus.hardware.{bluetooth_audio,orms}@1.0, vendor.qti.hardware.{dsp,tui_comm}@1.0).
+        """
+        spans = []
+        for m in re.finditer(r'(android_arm64|arm64|android_arm|arm)\s*:\s*\{', block):
+            depth, i = 1, m.end()
+            while i < len(block) and depth:
+                if block[i] == '{':
+                    depth += 1
+                elif block[i] == '}':
+                    depth -= 1
+                i += 1
+            spans.append(('arm64' if '64' in m.group(1) else 'arm', m.start(), i))
+        mod, per = set(), {}
+        for m in re.finditer(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
+            libs = set(re.findall(r'"([^"]+)"', m.group(1)))
+            owner = next((a for a, s, e in spans if s <= m.start() < e), None)
+            if owner:
+                per.setdefault(owner, set()).update(libs)
+            else:
+                mod |= libs
+        return mod, per
+
     bad, checked = [], 0
     for mtype, name, block in bp_modules(f'{VND}/Android.bp'):
         if mtype != 'cc_prebuilt_library_shared':
@@ -4560,9 +4587,7 @@ def c105():
         _ = installed
         if re.search(r'^\s*check_elf_files:\s*false', block, re.M):
             continue                     # the module opts out of the platform check, so nothing to mirror
-        libs = set()
-        for m in re.finditer(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
-            libs |= set(re.findall(r'"([^"]+)"', m.group(1)))
+        mod_libs, per_arch = _variant_libs(block)
         srcs = []
         for m in re.finditer(r'srcs:\s*\[([^\]]*)\]', block, re.S):
             srcs += re.findall(r'"([^"]+)"', m.group(1))
@@ -4573,6 +4598,9 @@ def c105():
             if needed is None:
                 continue
             checked += 1
+            # Check EVERY variant: a trailing `break` here meant only the first src (usually the 32-bit
+            # one) was ever examined, so 64-bit gaps were invisible to this gate too.
+            libs = per_arch.get('arm64' if '/lib64/' in src else 'arm') or mod_libs
             # Soong appends '.so' to a stem, so `stem: "libmmosal"` installs libmmosal.so and matches a
             # SONAME of libmmosal.so. Comparing the bare stem produced 9 false mismatches.
             installed_name = (stem_m.group(1) + '.so') if stem_m else os.path.basename(src)
@@ -4587,7 +4615,6 @@ def c105():
                 if son in excepted or (stem + '.so') in excepted:
                     continue
                 bad.append(f'{name}: needs {son}')
-            break
     chk('C105 a prebuilt declares every DT_NEEDED library', not bad,
         (f'{len(bad)} problem(s) across installed prebuilts: ' + '; '.join(bad[:4])
          + ' — the platform fails the module at check_elf_file and prints the fix; catching it here costs a'

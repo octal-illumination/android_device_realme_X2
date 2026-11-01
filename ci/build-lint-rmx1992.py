@@ -4328,7 +4328,14 @@ def c102():
         failed = (m and m.group(1) != '0') or 'ninja failed' in tail or 'ninja: build stopped' in tail
         if not failed:
             continue
-        rep = f'{ROOT}/logs/run/triage-{os.path.basename(p)}.md'
+        # Key by CONTENT HASH: the hourly mirror copies the same log under new names, so a per-filename
+        # requirement demanded redundant triage of byte-identical files (it fired four times today).
+        import hashlib
+        try:
+            h = hashlib.sha256(open(p, 'rb').read()).hexdigest()[:12]
+        except OSError:
+            continue
+        rep = f'{ROOT}/logs/run/triage-{h}.md'
         if not os.path.isfile(rep):
             missing.append(os.path.basename(p))
         elif os.path.getmtime(rep) < os.path.getmtime(p):

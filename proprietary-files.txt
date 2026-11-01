@@ -361,7 +361,6 @@ odm/lib64/libPlatformValidatorShared.so
 odm/lib64/libSNPE.so
 odm/lib64/libSNPE_G.so
 odm/lib64/libVDBayerHDR.so
-odm/lib64/libVDBlurless.so
 odm/lib64/libVDBlurlessAPI_v2.so
 odm/lib64/libVDDualCameraBlurlessAPI.so
 odm/lib64/libVDExternal.so

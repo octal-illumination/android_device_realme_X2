@@ -4553,8 +4553,10 @@ def c105():
     for mtype, name, block in bp_modules(f'{VND}/Android.bp'):
         if mtype != 'cc_prebuilt_library_shared':
             continue
-        if installed and name not in installed:
-            continue
+        # Check EVERY prebuilt module, not only those in PRODUCT_PACKAGES: the platform runs check_elf_file on
+        # every module that gets BUILT, and a module absent from PRODUCT_PACKAGES is still built when something
+        # depends on it. Scoping to installed modules hid 42 DT_NEEDED gaps that the build then reported.
+        _ = installed
         if re.search(r'^\s*check_elf_files:\s*false', block, re.M):
             continue                     # the module opts out of the platform check, so nothing to mirror
         libs = set()

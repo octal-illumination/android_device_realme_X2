@@ -3446,6 +3446,11 @@ def check_device_variant_siblings(root, base_src):
     bad = []
     for bp in _g4.glob(f'{root}/roms/common/vendor/realme/*.bp'):
         for _t, modname, block in bp_modules(bp):
+            # A PREBUILT cannot choose a variant: its DT_NEEDED names the exact soname in the binary, and the
+            # platform's check_elf_file requires a declared module that provides precisely that. Only modules we
+            # build from source can switch to the vendor variant, so the preference applies to them alone.
+            if _t.startswith('cc_prebuilt') or _t.startswith('prebuilt'):
+                continue
             sl = _re3.search(r'shared_libs:\s*\[(.*?)\]', block, _re3.S)
             if not sl:
                 continue

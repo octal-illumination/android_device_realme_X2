@@ -36,43 +36,6 @@ cc_library_shared {
 
 }
 
-// The device tree's own GPS utilities, compiled for this one consumer only (b2). Same sources as the
-// device's libgps.utils module, under a distinct module name so it can never shadow the OEM prebuilt.
-cc_library_static {
-
-    name: "libgnsspps_gps_utils",
-    vendor: true,
-
-    srcs: [
-        "../../gps/utils/loc_log.cpp",
-        "../../gps/utils/loc_cfg.cpp",
-        "../../gps/utils/msg_q.c",
-        "../../gps/utils/linked_list.c",
-        "../../gps/utils/loc_target.cpp",
-        "../../gps/utils/LocHeap.cpp",
-        "../../gps/utils/LocTimer.cpp",
-        "../../gps/utils/LocThread.cpp",
-        "../../gps/utils/MsgTask.cpp",
-        "../../gps/utils/loc_misc_utils.cpp",
-        "../../gps/utils/loc_nmea.cpp",
-        "../../gps/utils/LocIpc.cpp",
-        "../../gps/utils/LogBuffer.cpp",
-    ],
-
-    cflags: [
-        "-fno-short-enums",
-        "-D_ANDROID_",
-    ] + GNSS_CFLAGS,
-
-    header_libs: [
-        "libgps.utils_headers",
-        "libloc_pla_headers",
-        "libutils_headers",
-        "liblocation_api_headers",
-    ],
-
-}
-
 cc_library_headers {
 
     name: "libgnsspps_headers",

@@ -52,3 +52,43 @@ cc_library_headers {
     export_include_dirs: ["."],
     vendor: true,
 }
+
+// Note: This code is purely AI-generated.
+// (b2, 2026-11-02) The device tree's GPS utilities as a SEPARATE static library, for consumers that need
+// the API this tree's headers declare (loc_read_conf_long via the inline loc_read_conf, get_tag_log_level
+// via the LOC_LOG* macro) while the OEM libgps.utils.so stays the provider for the 25 prebuilt consumers
+// compiled against it (see roms/common/tools/ref/provider_swaps.txt, gate C107).
+// It must be defined HERE, not in the consuming directory: Soong rejects srcs paths containing "..".
+cc_library_static {
+
+    name: "libgnsspps_gps_utils",
+    vendor: true,
+
+    srcs: [
+        "loc_log.cpp",
+        "loc_cfg.cpp",
+        "msg_q.c",
+        "linked_list.c",
+        "loc_target.cpp",
+        "LocHeap.cpp",
+        "LocTimer.cpp",
+        "LocThread.cpp",
+        "MsgTask.cpp",
+        "loc_misc_utils.cpp",
+        "loc_nmea.cpp",
+        "LocIpc.cpp",
+        "LogBuffer.cpp",
+    ],
+
+    cflags: [
+        "-fno-short-enums",
+        "-D_ANDROID_",
+    ] + GNSS_CFLAGS,
+
+    header_libs: [
+        "libgps.utils_headers",
+        "libloc_pla_headers",
+        "libutils_headers",
+        "liblocation_api_headers",
+    ],
+}

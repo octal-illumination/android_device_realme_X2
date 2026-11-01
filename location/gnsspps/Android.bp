@@ -1,15 +1,26 @@
-
+// Note: This code is purely AI-generated.
+// (Android.bp accepts only // and /* */ comments — a '#' disclaimer line is a parse error, which C5 caught.)
 cc_library_shared {
 
     name: "libgnsspps",
     vendor: true,
 
+    // b2 (2026-11-02). The OEM libgps.utils.so is an older generation of the same library: it exports
+    // loc_read_conf and loc_read_conf_r, but neither loc_read_conf_long (which our newer loc_cfg.h calls
+    // from its inline loc_read_conf) nor get_tag_log_level (which the LOC_LOG* macro in log_util.h calls).
+    // 25 prebuilt consumers need 42 symbols from that soname and were compiled against the OEM blob, so
+    // the blob must stay the PROVIDER for them (ref/provider_swaps.txt, gate C107). This module therefore
+    // links the device tree's own GPS utilities statically, getting the implementation its own headers
+    // were written against, without changing what any vendor blob loads at runtime.
     shared_libs: [
         "libutils",
         "libcutils",
-        "libgps.utils",
         "liblog",
+        "libdl",
+        "libprocessgroup",
     ],
+
+    static_libs: ["libgnsspps_gps_utils"],
 
     srcs: ["gnsspps.c"],
 
@@ -21,6 +32,43 @@ cc_library_shared {
     header_libs: [
         "libgps.utils_headers",
         "libloc_pla_headers",
+    ],
+
+}
+
+// The device tree's own GPS utilities, compiled for this one consumer only (b2). Same sources as the
+// device's libgps.utils module, under a distinct module name so it can never shadow the OEM prebuilt.
+cc_library_static {
+
+    name: "libgnsspps_gps_utils",
+    vendor: true,
+
+    srcs: [
+        "../../gps/utils/loc_log.cpp",
+        "../../gps/utils/loc_cfg.cpp",
+        "../../gps/utils/msg_q.c",
+        "../../gps/utils/linked_list.c",
+        "../../gps/utils/loc_target.cpp",
+        "../../gps/utils/LocHeap.cpp",
+        "../../gps/utils/LocTimer.cpp",
+        "../../gps/utils/LocThread.cpp",
+        "../../gps/utils/MsgTask.cpp",
+        "../../gps/utils/loc_misc_utils.cpp",
+        "../../gps/utils/loc_nmea.cpp",
+        "../../gps/utils/LocIpc.cpp",
+        "../../gps/utils/LogBuffer.cpp",
+    ],
+
+    cflags: [
+        "-fno-short-enums",
+        "-D_ANDROID_",
+    ] + GNSS_CFLAGS,
+
+    header_libs: [
+        "libgps.utils_headers",
+        "libloc_pla_headers",
+        "libutils_headers",
+        "liblocation_api_headers",
     ],
 
 }

@@ -3715,7 +3715,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4640,6 +4640,122 @@ def c106():
         else 'every key directly under target: is an arch/OS block')
 
 
+# --- C107: a provider swap must state its ABI contract -------------------------------------------
+# History (2026-11-02): flipping `prefer: false` on libgps.utils swapped the provider of a shared
+# soname from the OEM blob to our source build. The consumer that motivated the flip (libgnsspps) then
+# linked -- but 18 prebuilt consumers lost 42 symbols they need from that soname, because our source is
+# a different GENERATION of the same library: our loc_cfg.h makes loc_read_conf an inline that calls
+# loc_read_conf_long, which the F.26 blob never had, and the OEM blobs were compiled against the blob.
+# No gate modelled provider IDENTITY: C105 checks declarations, C60/C66 check existence, C98 forbids
+# the opposite direction, and nothing read exported symbols at all. 15 minutes into a build is a bad
+# place to discover a 42-symbol contract, so the contract must be stated at flip time instead.
+# Escape: `provider-swap-ok:<module> consumers=<n> symbols=<n>` in ref/provider_swaps.txt, where BOTH
+# counts must match what this gate measures -- a prose claim is not an escape (ALLOWLIST DISCIPLINE).
+def c107():
+    vbp = f'{VND}/Android.bp'
+    if not os.path.isfile(vbp):
+        info('C107 provider swaps', 'vendor Android.bp absent')
+        return
+    dev = set()
+    for p in glob.glob(f'{DT}/**/*.bp', recursive=True):
+        if '/ci/' in p:
+            continue
+        dev |= set(re.findall(r'^\s*name:\s*"([^"]+)"',
+                              open(p, encoding='utf-8', errors='replace').read(), re.M))
+    vend = {name: block for _t, name, block in bp_modules(vbp)}
+    pairs = sorted(set(dev) & set(vend))
+    if not pairs:
+        info('C107 provider swaps', 'no module is defined in both trees')
+        return
+
+    ledger = {}
+    lp = f'{ROOT}/roms/common/tools/ref/provider_swaps.txt'
+    if os.path.isfile(lp):
+        for ln in open(lp, encoding='utf-8', errors='replace'):
+            ln = ln.strip()
+            if ln.startswith('provider-swap-ok:'):
+                bits = ln[len('provider-swap-ok:'):].split()
+                ledger[bits[0]] = {k: v for k, v in (b.split('=', 1) for b in bits[1:] if '=' in b)}
+
+    def _consumers(mod):
+        # shared_libs is a superset of DT_NEEDED (C105 enforces that), so a text scan is exact here and
+        # avoids reading 600+ ELF headers on every push.
+        out = []
+        for name, block in vend.items():
+            if name == mod:
+                continue
+            for lst in re.findall(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
+                if re.search(r'"%s"' % re.escape(mod), lst):
+                    out.append(name)
+                    break
+        return out
+
+    def _blob(mod):
+        _t, _n, block = next(((t, n, b) for t, n, b in bp_modules(vbp) if n == mod), (None, None, ''))
+        m = re.search(r'"(proprietary/[^"]+\.so)"', block or '')
+        return os.path.join(VND, m.group(1)) if m else None
+
+    def _syms(path, undef):
+        flag = '--undefined-only' if undef else '--defined-only'
+        for cmd in (['nm', '-D', flag, path], ['readelf', '-sW', '--dyn-syms', flag, path]):
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if r.returncode != 0 or not r.stdout:
+                continue
+            got = {ln.split()[-1].split('@')[0] for ln in r.stdout.splitlines() if ln.split()}
+            got.discard('Name')
+            got.discard('UND')
+            if got:
+                return got
+        return set()
+
+    swaps, kept = [], []
+    for mod in pairs:
+        cons = _consumers(mod)
+        if re.search(r'prefer:\s*true', vend[mod]):
+            kept.append((mod, len(cons)))
+        elif cons:
+            swaps.append((mod, cons))
+
+    bad, measured, benign = [], {}, []
+    for mod, cons in swaps:
+        blob = _blob(mod)
+        if blob and os.path.isfile(blob):
+            undef = set()
+            for c in cons:
+                cb = _blob(c)
+                if cb and os.path.isfile(cb):
+                    undef |= _syms(cb, True)
+            measured[mod] = (len(cons), len(_syms(blob, False) & undef))
+        led = ledger.get(mod)
+        m = measured.get(mod)
+        if not led:
+            # A swap that costs consumers nothing is not a swap worth blocking: no symbol any consumer
+            # needs from the OEM provider is missing, so the ABI contract is empty by measurement.
+            if m and m[1] == 0:
+                benign.append((mod, m[0]))
+                continue
+            bad.append(f'{mod}: our SOURCE is the provider for {len(cons)} prebuilt consumer(s)'
+                       + (f' needing {m[1]} symbol(s)' if m else '')
+                       + f' with no `provider-swap-ok:{mod}` entry')
+        elif m and (str(m[0]) != led.get('consumers') or str(m[1]) != led.get('symbols')):
+            bad.append(f'{mod}: ledger says consumers={led.get("consumers")} symbols={led.get("symbols")}'
+                       f' but measurement says consumers={m[0]} symbols={m[1]}')
+    chk('C107 a provider swap states its ABI contract', not bad,
+        ('; '.join(bad[:3])
+         + ' -- swapping the provider of a shared soname from an OEM blob to our source build silently'
+           ' changes the ABI every consumer links against, and our source is a different generation of the'
+           ' same library (case: libgps.utils, 18 consumers / 42 symbols, build 20261101_220659). Record the'
+           ' contract in ref/provider_swaps.txt, or keep the prebuilt as provider and give the source-side'
+           ' modules their own implementation.') if bad else
+        (f'{len(kept)} pair(s) keep the OEM prebuilt as provider ('
+         + ', '.join(f'{m}[{c} consumer(s)]' for m, c in kept) + '); '
+         + (f'{len(benign)} swap(s) measured to cost consumers 0 symbols ('
+            + ', '.join(f'{m}[{c} consumer(s)]' for m, c in benign) + '); ' if benign else '')
+         + '0 unrecorded swaps'))
+# Note: This code is purely AI-generated.
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

@@ -3,11 +3,12 @@
 # Legal soong prebuilt-over-source overrides (same partition); C56 guards NEW pairs.
 # C23 also resolves deps against these (device-tree-provided), preventing forced prebuilt adds
 # (the blind spot that created the android.hidl.base@1.0 prebuilt in the 38-blob round).
-libgps.utils  <- device/X2/gps/utils (vendor:true source) vs our vendor prebuilt (prefer: SOURCE, flipped 2026-11-02)
-#   why: the F.26 blob exports loc_read_conf/loc_read_conf_r but NOT loc_read_conf_long or
-#   get_tag_log_level, both of which the device source defines; libgnsspps links the headers from
-#   device/X2/gps/utils, so the prebuilt could not satisfy it. Evidence: readelf -sW --dyn-syms on
-#   proprietary/vendor/lib64/libgps.utils.so + logs/CHANGELOG.md 2026-11-02.
+libgps.utils  <- device/X2/gps/utils (vendor:true source) vs our vendor prebuilt (prefer: OURS, kept 2026-11-02)
+#   why kept: 25 prebuilt consumers need 42 symbols from this soname and were compiled against the F.26
+#   blob (readelf: it exports loc_read_conf/loc_read_conf_r but NOT loc_read_conf_long or
+#   get_tag_log_level, which our newer headers call inline). Swapping the provider to our source broke
+#   all of them in build 20261101_220659, so the blob stays provider (gate C107,
+#   ref/provider_swaps.txt) and libgnsspps links our utilities statically instead (b2).
 libloc_core   <- device/X2/gps/core   (vendor:true source) vs our vendor prebuilt
 liblocation_api <- device/X2/gps/location (vendor:true source) vs our vendor prebuilt
 vendor.oplus.hardware.biometrics.fingerprint@2.1 <- device/X2/interfaces hidl_interface (device.mk packages it) vs our odm prebuilt

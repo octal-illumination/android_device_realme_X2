@@ -3715,7 +3715,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4783,6 +4783,86 @@ def c107():
             + ', '.join(f'{m}[{c} consumer(s)]' for m, c in benign) + '); ' if benign else '')
          + '0 unrecorded swaps'))
 # Note: This code is purely AI-generated.
+# Note: This code is purely AI-generated.
+# --- C108: no duplicate property keys within the same Android.bp brace scope ----------------------
+# History (2026-11-02): build 20261102_010733 died at 23s in soong_build bootstrap:
+#   error: vendor/realme/X2/Android.bp:20251:16: property "shared_libs" already defined
+#   error: vendor/realme/X2/Android.bp:20248:16: <-- previous definition here
+# Commit fc35d71f had appended a second module-level `shared_libs` block inside `libwfdclient` instead of
+# merging into the existing list. Gate C5 runs `bpfmt`, which is a syntax formatter that tolerates duplicate
+# keys within a `{ ... }` block; only `soong_build` rejects them at ninja-generation time.
+def _bp_dup_props_in_text(src, rel):
+    import bisect
+    scan = _bp_strip_comments(src)
+    nl = [i for i, ch in enumerate(scan) if ch == '\n']
+    stack, bad = [], []
+    for m in re.finditer(r'([A-Za-z_][A-Za-z0-9_]*)\s*:|[{}]', scan):
+        tok = m.group(0)
+        if tok == '{':
+            stack.append({})
+        elif tok == '}':
+            if stack:
+                stack.pop()
+        elif stack:
+            key = m.group(1)
+            ln = bisect.bisect_right(nl, m.start()) + 1
+            scope = stack[-1]
+            if key in scope:
+                bad.append(f'{rel}:{ln} duplicate property "{key}" (first at line {scope[key]})')
+            else:
+                scope[key] = ln
+    return bad
+
+
+def c108():
+    bps = [f for f in glob.glob(f'{VND}/**/*.bp', recursive=True)
+           + glob.glob(f'{DT}/**/*.bp', recursive=True)
+           if '/ci/' not in f]
+    bad, scanned = [], 0
+    for f in sorted(set(bps)):
+        try:
+            src = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        scanned += 1
+        bad += _bp_dup_props_in_text(src, os.path.relpath(f, ROOT))
+    chk('C108 no duplicate property keys within an Android.bp scope', not bad,
+        (f'{len(bad)} duplicate property definition(s): ' + '; '.join(bad[:4])
+         + ' — bpfmt (C5) accepts duplicate keys in the same `{ ... }` block, while soong_build aborts'
+           ' at bootstrap with `property "<name>" already defined` (build 20261102_010733)') if bad
+        else f'{scanned} Android.bp file(s) scanned by brace scope, 0 duplicate property keys')
+
+
+# --- C109: no parent-escaping `..` paths in Android.bp file/include lists -------------------------
+# History (2026-11-02): build 20261101_225135 failed at ninja generation with:
+#   error: device/realme/X2/location/gnsspps/Android.bp:41:1: module "libgnsspps_gps_utils"
+#   Path is outside directory: ../..
+# Soong forbids `..` path traversal in module `srcs` / `*_include_dirs` / `init_rc` / `vintf_fragments`
+# while `bpfmt` accepts them as valid string literals.
+_BP_PATH_PROPS = ('srcs', 'exclude_srcs', 'local_include_dirs', 'export_include_dirs',
+                  'init_rc', 'vintf_fragments')
+
+
+def c109():
+    bps = [f for f in glob.glob(f'{VND}/**/*.bp', recursive=True)
+           + glob.glob(f'{DT}/**/*.bp', recursive=True)
+           if '/ci/' not in f]
+    bad, checked = [], 0
+    pat = re.compile(r'\b(' + '|'.join(_BP_PATH_PROPS) + r')\s*:\s*\[([^\]]*)\]', re.S)
+    for f in sorted(set(bps)):
+        rel = os.path.relpath(f, ROOT)
+        for _t, name, block in bp_modules(f):
+            for m in pat.finditer(block):
+                prop = m.group(1)
+                for tok in re.findall(r'"([^"]+)"', m.group(2)):
+                    checked += 1
+                    if '..' in tok.replace('\\', '/').split('/'):
+                        bad.append(f'{rel} ({name}): {prop} contains "{tok}"')
+    chk('C109 no parent-escaping `..` paths in Android.bp file/include lists', not bad,
+        (f'{len(bad)} parent-escaping path(s): ' + '; '.join(bad[:4])
+         + ' — Soong rejects `..` in module paths with `Path is outside directory` at ninja generation'
+           ' (build 20261101_225135); define the module in the directory that owns the files') if bad
+        else f'{checked} path entries across {len(bps)} Android.bp file(s) checked, 0 escape via `..`')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

@@ -380,11 +380,11 @@
         <fqname>@1.0::IOplusRadio/oplus_slot1</fqname>
         <fqname>@1.0::IOplusRadio/oplus_slot2</fqname>
     </hal>
-    <hal format="hidl">
-        <name>android.hardware.health</name>
-        <transport arch="64">passthrough</transport>
-        <fqname>@2.1::IHealth/default</fqname>
-    </hal>
+    <!-- android.hardware.health @2.1::IHealth/default removed: the AOSP
+         android.hardware.health@2.1-service package (device.mk) ships its own VINTF fragment
+         (android.hardware.health@2.1.xml) declaring the same instance; keeping both made
+         checkvintf fail with a conflicting FqInstance (build 20261102_125223; same class as
+         the usb conflict fixed for build 20261102_121332 — transport does not matter). -->
     <hal format="hidl">
         <name>android.hardware.power</name>
         <transport arch="64">passthrough</transport>

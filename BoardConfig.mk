@@ -140,14 +140,17 @@ BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
 TARGET_COPY_OUT_VENDOR := vendor
 TARGET_COPY_OUT_ODM := odm
 
-TARGET_COPY_OUT_PRODUCT := product
-TARGET_COPY_OUT_SYSTEM_EXT := system_ext
-# No BOARD_{PRODUCT,SYSTEM_EXT}IMAGE_FILE_SYSTEM_TYPE: with those unset the
-# build folds system_ext/product content INTO system.img as folders — exactly
-# like stock F.26 (there are no system_ext/product partitions in the GPT).
-# Setting them forces separate product.img/system_ext.img builds that need
-# partition sizes no partition exists for (build_image KeyError: partition_size,
-# build 20261102_094027).
+# A16 board_config.mk:741: if TARGET_COPY_OUT_PRODUCT is 'product', a separate product image
+# (or prebuilt image) is MANDATORY — the fold-in needs the copy-out redirected into the system
+# tree instead. system/product + system/system_ext reproduce the stock F.26 layout byte-for-byte
+# (system_ext/product are folders inside system.img; the GPT has no such slots).
+TARGET_COPY_OUT_PRODUCT := system/product
+TARGET_COPY_OUT_SYSTEM_EXT := system/system_ext
+# No BOARD_{PRODUCT,SYSTEM_EXT}IMAGE_FILE_SYSTEM_TYPE: the copy-out redirect above (system/product,
+# system/system_ext) is what folds system_ext/product content INTO system.img as folders — exactly
+# like stock F.26 (there are no system_ext/product partitions in the GPT). Setting the FS types
+# forces separate product.img/system_ext.img builds that need partition sizes no partition exists
+# for (build_image KeyError: partition_size, build 20261102_094027).
 BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4

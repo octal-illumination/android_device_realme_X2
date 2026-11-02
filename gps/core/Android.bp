@@ -12,7 +12,6 @@ cc_library_shared {
         "libcutils",
         "libgps.utils",
         "libdl",
-        "liblog",
     ],
 
     srcs: [
@@ -52,5 +51,44 @@ cc_library_headers {
     export_include_dirs: ["."] + [
         "data-items",
         "observer",
+    ],
+}
+
+// Note: This code is purely AI-generated.
+// (2026-11-02) Static build of the device tree's gps/core (LocApiBase, LocContext, ContextBase,
+// SystemStatus) for device-tree GNSS source modules (libsynergy_loc_api, android.hardware.gnss@2.1-impl-qti)
+// compiled against libloc_core_headers while the OEM F.26 libloc_core.so stays prefer: true for the
+// prebuilt IZat/GNSS blobs (gate C107 / C110).
+cc_library_static {
+
+    name: "libgnss_loc_core_static",
+    vendor: true,
+
+    srcs: [
+        "LocApiBase.cpp",
+        "LocAdapterBase.cpp",
+        "ContextBase.cpp",
+        "LocContext.cpp",
+        "loc_core_log.cpp",
+        "data-items/DataItemsFactoryProxy.cpp",
+        "SystemStatusOsObserver.cpp",
+        "SystemStatus.cpp",
+    ],
+
+    cflags: [
+        "-fno-short-enums",
+        "-D_ANDROID_",
+    ] + GNSS_CFLAGS,
+
+    local_include_dirs: [
+        "data-items",
+        "observer",
+    ],
+
+    header_libs: [
+        "libutils_headers",
+        "libgps.utils_headers",
+        "libloc_pla_headers",
+        "liblocation_api_headers",
     ],
 }

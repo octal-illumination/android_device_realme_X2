@@ -3715,7 +3715,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4534,12 +4534,10 @@ def c105():
             t = ln.strip().rstrip('\\').strip()
             if t and not t.startswith('#') and ' ' not in t and ':=' not in t and '+=' not in t:
                 installed.add(t)
-    base_provided = set()
-    for name in ('base_system_libraries.txt', 'base_core_modules.txt', 'base_module_universe.txt'):
-        f = f'{ROOT}/roms/common/tools/ref/{name}'
-        if os.path.isfile(f):
-            base_provided |= {ln.strip() for ln in open(f, encoding='utf-8', errors='replace')
-                              if ln.strip() and not ln.startswith('#')}
+    # Soong's check_elf_file only auto-passes defaultSystemSharedLibs (libc, libm, libdl, libc++).
+    # Skipping base_provided hid 32-bit libwfdclient missing liblog/libutils/libcutils/libbinder/libgui/
+    # libinput/libnativewindow in build 20261102_025053.
+    soong_default_libs = {'libc', 'libm', 'libdl', 'libc++'}
     excepted = set()
     exf = f'{ROOT}/roms/common/tools/ref/elf-copy-exceptions.txt'
     if os.path.isfile(exf):
@@ -4608,13 +4606,15 @@ def c105():
                 bad.append(f'{name}: DT_SONAME {soname} != installed {installed_name} (add stem:)')
             for son in needed:
                 stem = re.sub(r'\.so(\.\d+)*$', '', son)
-                if stem in libs or son in libs:
+                if stem in libs or son in libs or f'{stem}-vendorcompat' in libs:
                     continue
-                if stem in base_provided or son in base_provided:
+                if stem.startswith('libclang_rt.ubsan_standalone') and 'libclang_rt.ubsan_standalone' in libs:
+                    continue
+                if stem in soong_default_libs:
                     continue
                 if son in excepted or (stem + '.so') in excepted:
                     continue
-                bad.append(f'{name}: needs {son}')
+                bad.append(f'{name} ({os.path.basename(os.path.dirname(src))}/{os.path.basename(src)}): needs {son}')
     chk('C105 a prebuilt declares every DT_NEEDED library', not bad,
         (f'{len(bad)} problem(s) across installed prebuilts: ' + '; '.join(bad[:4])
          + ' — the platform fails the module at check_elf_file and prints the fix; catching it here costs a'
@@ -4863,6 +4863,129 @@ def c109():
          + ' — Soong rejects `..` in module paths with `Path is outside directory` at ninja generation'
            ' (build 20261101_225135); define the module in the directory that owns the files') if bad
         else f'{checked} path entries across {len(bps)} Android.bp file(s) checked, 0 escape via `..`')
+# Note: This code is purely AI-generated.
+# --- C110: shadowed-prebuilt dynamic link & prebuilt undefined-symbol guard -----------------------
+# History (2026-11-02): build 20261102_025053 failed on two classes of symbol-resolution errors:
+#   1. Device-tree GNSS source modules (libsynergy_loc_api, android.hardware.gnss@2.1-impl-qti)
+#      compiled against device/X2/gps/{utils,core} headers (libgps.utils_headers, libloc_core_headers)
+#      while linking dynamically against libgps.utils / libloc_core — which resolve at link time to
+#      the `prefer: true` Android 11 F.26 OEM prebuilts lacking get_tag_log_level, loc_read_conf_long,
+#      loc_util::LocThread::stop, loc_util::MsgTask::sendMsg, LocContext::getLocContext(const char*),
+#      and LocApiBase::setMeasurementCorrections.
+#   2. Prebuilt vendor/odm/system_ext shared libraries without `allow_undefined_symbols: true` failed
+#      Soong's check_elf_file on undefined symbols removed or unversioned in Android 16:
+#        - @SDSPRPC / @ADSPRPC / @CDSPRPC / @MDSPRPC versioned symbols against unversioned lib*dsprpc.so
+#        - @LIBANDROID symbols in prebuilts not linking libandroid
+#        - BoringSSL CBS_init / EVP_cleanup (inlined/removed in Android 16 libcrypto.so)
+#        - Android 11 C++ mangled Skia/GUI/UI/Audio signatures removed in Android 16
+_C110_BAD_UNDEF_RE = re.compile(
+    r'@[A-Z]*DSPRPC\b'
+    r'|^(?:CBS_init|EVP_cleanup)$'
+    r'|^_ZN(?:6SkData|7SkImage|8SkBitmap)'
+    r'|^_ZN7android(?:13LayerMetadata|21SurfaceComposerClient|13GraphicBuffer|11MotionEvent|8KeyEvent)'
+    r'|^_ZN7android7SurfaceC1ERKNS_2spINS_22IGraphicBufferProducerEEEb$'
+    r'|^_ZN7android11AudioSystem24setDeviceConnectionState'
+)
+
+
+def _c110_installed_dt_packages():
+    pkgs = set()
+    dmk = f'{DT}/device.mk'
+    if not os.path.isfile(dmk):
+        return pkgs
+    no_comments = '\n'.join(ln.split('#', 1)[0] for ln in open(dmk, encoding='utf-8', errors='replace'))
+    flat = re.sub(r'\\\s*\n', ' ', no_comments)
+    for m in re.finditer(r'^\s*PRODUCT_PACKAGES\s*[:+]?=\s*(.+)$', flat, re.M):
+        for tok in m.group(1).split():
+            if not tok.startswith('PRODUCT_PACKAGES'):
+                pkgs.add(tok)
+    return pkgs
+
+
+def _c110_check_gnss_shadow_links(installed):
+    bad = []
+    shadowed = {'libgps.utils': 'libgnsspps_gps_utils', 'libloc_core': 'libgnss_loc_core_static'}
+    for f in sorted(glob.glob(f'{DT}/**/*.bp', recursive=True)):
+        if '/ci/' in f:
+            continue
+        for _t, name, block in bp_modules(f):
+            if name not in installed:
+                continue
+            hdrs = set()
+            for m in re.finditer(r'header_libs:\s*\[([^\]]*)\]', block, re.S):
+                hdrs |= set(re.findall(r'"([^"]+)"', m.group(1)))
+            if not (hdrs & {'libgps.utils_headers', 'libloc_core_headers'}):
+                continue
+            sh = set()
+            for m in re.finditer(r'shared_libs:\s*\[([^\]]*)\]', block, re.S):
+                sh |= set(re.findall(r'"([^"]+)"', m.group(1)))
+            for s in sorted(sh & set(shadowed)):
+                bad.append(f'{name} ({os.path.relpath(f, ROOT)}): links shadowed {s} dynamically (use {shadowed[s]})')
+    for f in sorted(glob.glob(f'{DT}/**/*.mk', recursive=True)):
+        txt = open(f, encoding='utf-8', errors='replace').read()
+        for chunk in re.split(r'\binclude\s+\$\(CLEAR_VARS\)', txt)[1:]:
+            m_mod = re.search(r'^\s*LOCAL_MODULE\s*:=\s*(\S+)', chunk, re.M)
+            if not m_mod or m_mod.group(1) not in installed:
+                continue
+            name = m_mod.group(1)
+            flat = re.sub(r'\\\s*\n', ' ', chunk)
+            hdrs = set()
+            for m in re.finditer(r'^\s*LOCAL_HEADER_LIBRARIES\s*[:+]?=\s*(.+)$', flat, re.M):
+                hdrs.update(m.group(1).split())
+            if not (hdrs & {'libgps.utils_headers', 'libloc_core_headers'}):
+                continue
+            sh = set()
+            for m in re.finditer(r'^\s*LOCAL_SHARED_LIBRARIES\s*[:+]?=\s*(.+)$', flat, re.M):
+                sh.update(m.group(1).split())
+            for s in sorted(sh & set(shadowed)):
+                bad.append(f'{name} ({os.path.relpath(f, ROOT)}): links shadowed {s} dynamically (use {shadowed[s]})')
+    return bad
+
+
+def c110():
+    import subprocess
+    vbp = f'{VND}/Android.bp'
+    if not os.path.isfile(vbp):
+        info('C110 shadowed-prebuilt link & prebuilt undef symbol guard', 'vendor Android.bp absent')
+        return
+    installed = _c110_installed_dt_packages()
+    bad = _c110_check_gnss_shadow_links(installed)
+    checked = 0
+    for mtype, name, block in bp_modules(vbp):
+        if mtype != 'cc_prebuilt_library_shared':
+            continue
+        if re.search(r'^\s*(?:check_elf_files:\s*false|allow_undefined_symbols:\s*true)', block, re.M):
+            continue
+        srcs = []
+        for m in re.finditer(r'srcs:\s*\[([^\]]*)\]', block, re.S):
+            srcs += re.findall(r'"([^"]+)"', m.group(1))
+        for src in srcs:
+            path = f'{VND}/{src}' if not src.startswith('/') else src
+            if not os.path.isfile(path):
+                continue
+            checked += 1
+            try:
+                out = subprocess.run(['nm', '-D', '--undefined-only', path],
+                                     capture_output=True, text=True, timeout=60).stdout
+            except (OSError, subprocess.SubprocessError):
+                continue
+            hits = []
+            for ln in out.splitlines():
+                parts = ln.split()
+                if parts:
+                    sym = parts[-1]
+                    if _C110_BAD_UNDEF_RE.search(sym):
+                        hits.append(sym)
+            if hits:
+                bad.append(f'{name} ({os.path.basename(src)}): undef {hits[0]}'
+                           + (f' (+{len(hits) - 1} more)' if len(hits) > 1 else ''))
+                break
+    chk('C110 no shadowed GNSS dynamic links and no unallowed Android 11/DSP undefined symbols in prebuilts',
+        not bad,
+        (f'{len(bad)} symbol-resolution hazard(s): ' + '; '.join(bad[:4])
+         + ' — either link static device-tree GNSS libs (libgnsspps_gps_utils / libgnss_loc_core_static)'
+           ' or set allow_undefined_symbols: true on stock prebuilts (build 20261102_025053)') if bad
+        else f'{len(installed)} installed DT package(s) and {checked} prebuilt ELF variant(s) checked, 0 hazards')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

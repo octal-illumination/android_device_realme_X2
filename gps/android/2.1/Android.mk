@@ -61,14 +61,13 @@ LOCAL_SHARED_LIBRARIES := \
     libbase
 
 LOCAL_SHARED_LIBRARIES += \
-    libloc_core \
-    libgps.utils \
     libdl \
     liblocation_api \
 
 LOCAL_CFLAGS += $(GNSS_CFLAGS)
 LOCAL_STATIC_LIBRARIES := liblocbatterylistener
 LOCAL_STATIC_LIBRARIES += libhealthhalutils
+LOCAL_STATIC_LIBRARIES += libgnss_loc_core_static libgnsspps_gps_utils
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -96,8 +95,10 @@ LOCAL_SHARED_LIBRARIES := \
     libdl \
     libbase \
     libutils \
-    libgps.utils \
     libqti_vndfwk_detect \
+
+LOCAL_STATIC_LIBRARIES := \
+    libgnsspps_gps_utils
 
 LOCAL_SHARED_LIBRARIES += \
     libhidlbase \

@@ -14,10 +14,12 @@ LOCAL_VENDOR_MODULE := true
 LOCAL_SHARED_LIBRARIES := \
     libutils \
     libcutils \
-    libloc_core \
-    libgps.utils \
     libdl \
     liblog
+
+LOCAL_STATIC_LIBRARIES := \
+    libgnss_loc_core_static \
+    libgnsspps_gps_utils
 
 LOCAL_SRC_FILES = \
     SynergyLocApi.cpp

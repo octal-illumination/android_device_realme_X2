@@ -3715,7 +3715,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -4986,6 +4986,63 @@ def c110():
          + ' — either link static device-tree GNSS libs (libgnsspps_gps_utils / libgnss_loc_core_static)'
            ' or set allow_undefined_symbols: true on stock prebuilts (build 20261102_025053)') if bad
         else f'{len(installed)} installed DT package(s) and {checked} prebuilt ELF variant(s) checked, 0 hazards')
+# Note: This code is purely AI-generated.
+# --- C111/C112: partition geometry vs the factory GPT census -----------------------------------------
+# History (2026-11-02): build 20261102_094027 was the FIRST run to reach packaging, and it died at
+# product.img with `build_image.py KeyError: 'partition_size'`. Two geometry defects behind it:
+#   1. (C111) BoardConfig carried system=4,320,133,120 / vendor=1,631,584,256 while the device's own
+#      factory rawprogram0.xml (tier-1 evidence, ref/partition-census.txt) declares
+#      system=5,690,830,848 / vendor=1,845,493,760. Inherited-undersized sizes cap images below
+#      what the real partition holds — and an oversized one would refuse to flash.
+#   2. (same gate) BOARD_{PRODUCT,SYSTEM_EXT}IMAGE_FILE_SYSTEM_TYPE := ext4 (our b494a38 "Round 8"
+#      commit; upstream baseline has neither) forces separate product.img/system_ext.img builds
+#      whose partition sizes cannot exist — stock F.26 folds system_ext/product INTO system
+#      (no such GPT slots). build_image then needs a partition_size no variable provides.
+# Negative tests (mandatory, NEW-CHECK PROTOCOL): see ci/ref/gate-selftests/ (run by 999).
+_PARTITION_RE = re.compile(r'^BOARD_([A-Z0-9_]+)IMAGE_(PARTITION_SIZE|FILE_SYSTEM_TYPE)\s*[:+]?=\s*(\S+)')
+
+
+def _c111_c112_census():
+    census = {}
+    p = f'{ROOT}/roms/common/tools/ref/partition-census.txt'
+    if os.path.isfile(p):
+        for line in open(p):
+            line = line.strip()
+            if line and not line.startswith('#'):
+                k, v = line.split()
+                census[k.upper()] = int(v)  # BoardConfig speaks UPPER; census file is lowercase
+    return census
+
+
+def c111_c112():
+    census = _c111_c112_census()
+    if not census:
+        info('C111/C112 partition geometry vs census', 'census cache absent — gate skipped')
+        return
+    declared_size, declared_fstype = {}, {}
+    for path in (f'{DT}/BoardConfig.mk', f'{DT}/BoardConfigVendor.mk', f'{VND}/BoardConfigVendor.mk'):
+        if not os.path.isfile(path):
+            continue
+        for line in open(path):
+            m = _PARTITION_RE.match(line.strip())
+            if m:
+                part, key, val = m.groups()
+                (declared_size if key == 'PARTITION_SIZE' else declared_fstype)[part] = (val, path)
+    bad = []
+    for part, (val, path) in sorted(declared_size.items()):
+        if part in census and census[part] and int(val) != census[part]:
+            bad.append(f'{part}: BoardConfig {val} != census {census[part]} ({os.path.basename(path)})')
+    for part, (val, path) in sorted(declared_fstype.items()):
+        # census value 0 = dynamic/no-fixed-size partition (e.g. userdata): a FILE_SYSTEM_TYPE
+        # is legitimate there, only an unknown partition (absent from the GPT census) is a defect.
+        if part not in census and part not in declared_size:
+            bad.append(f'{part}: FILE_SYSTEM_TYPE={val} but the census has no such partition '
+                       f'({os.path.basename(path)}) — fold into system or declare the size')
+    chk('C111/C112 BoardConfig partition geometry equals the factory census',
+        not bad,
+        ('; '.join(bad) + ' — sizes must match ref/partition-census.txt (rawprogram census); '
+         'partitions absent from the census must not build separate images (build 20261102_094027)') if bad
+        else f'{len(declared_size)} size(s) and {len(declared_fstype)} FS type(s) checked against the census, 0 mismatches')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

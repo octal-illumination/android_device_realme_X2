@@ -126,9 +126,13 @@ BOARD_USES_METADATA_PARTITION := true
 # like stock F.26. Verified: firmware-images-inventory.md §3 GPT census + stock
 # fstab (2026-10-28 queue-time audit). NEVER reintroduce retrofit-dynamic config —
 # this device cannot boot it (no super metadata support on the stock bootloader).
-BOARD_SYSTEMIMAGE_PARTITION_SIZE := 4320133120
+# Sizes = the device's own factory rawprogram census (F.26 rawprogram0.xml,
+# firmware-images-inventory.md §3): system 5,557,452 KB, vendor 1,802,240 KB.
+# The previous 4320133120/1631584256 values were inherited-undersized and would
+# cap system.img below what the real partition holds.
+BOARD_SYSTEMIMAGE_PARTITION_SIZE := 5690830848
 BOARD_SYSTEMIMAGE_PARTITION_TYPE := ext4
-BOARD_VENDORIMAGE_PARTITION_SIZE := 1631584256
+BOARD_VENDORIMAGE_PARTITION_SIZE := 1845493760
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ODMIMAGE_PARTITION_SIZE := 268435456
 BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
@@ -138,9 +142,13 @@ TARGET_COPY_OUT_ODM := odm
 
 TARGET_COPY_OUT_PRODUCT := product
 TARGET_COPY_OUT_SYSTEM_EXT := system_ext
+# No BOARD_{PRODUCT,SYSTEM_EXT}IMAGE_FILE_SYSTEM_TYPE: with those unset the
+# build folds system_ext/product content INTO system.img as folders — exactly
+# like stock F.26 (there are no system_ext/product partitions in the GPT).
+# Setting them forces separate product.img/system_ext.img builds that need
+# partition sizes no partition exists for (build_image KeyError: partition_size,
+# build 20261102_094027).
 BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := ext4
-BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE := ext4
-BOARD_PRODUCTIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_ODMIMAGE_FILE_SYSTEM_TYPE := ext4
 TARGET_COPY_OUT_VENDOR := vendor

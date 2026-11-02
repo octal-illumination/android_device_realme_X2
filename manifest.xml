@@ -390,9 +390,8 @@
         <transport arch="64">passthrough</transport>
         <fqname>@1.3::IPower/default</fqname>
     </hal>
-    <hal format="hidl">
-        <name>android.hardware.usb</name>
-        <transport>hwbinder</transport>
-        <fqname>@1.0::IUsb/default</fqname>
-    </hal>
+    <!-- android.hardware.usb @1.0::IUsb/default removed: the AOSP
+         android.hardware.usb@1.0-service package (device.mk) ships its own VINTF fragment
+         declaring the same instance; keeping both made checkvintf fail with a conflicting
+         FqInstance (build 20261102_121332). -->
 </manifest>

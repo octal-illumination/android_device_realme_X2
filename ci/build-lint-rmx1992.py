@@ -1412,12 +1412,17 @@ def c50():
     for critical_hal in ['android.hardware.audio', 'android.hardware.camera.provider', 'android.hardware.keymaster']:
         if critical_hal not in manifest:
             issues.append(f'manifest missing critical HAL: {critical_hal}')
-    # Self-registering HALs (health/power/usb) don't need manifest but should be there
-    self_registering = ['android.hardware.health', 'android.hardware.power', 'android.hardware.usb']
-    missing_self_reg = [h for h in self_registering if h not in manifest]
-    if missing_self_reg:
-        warn('C50 self-registering HALs not in manifest (non-blocking)',
-             f'{", ".join(missing_self_reg)} — they self-register at runtime but SHOULD be declared')
+    # Self-registering HALs ship their own VINTF fragment. Evidence (build 20261102_121332):
+    # duplicating the module's OWN binder declaration in manifest.xml is a HARD checkvintf failure
+    # ("Conflicting FqInstance: @1.0::IUsb/default (from /vendor/etc/vintf/manifest.xml) vs
+    # (from /vendor/etc/vintf/manifest/android.hardware.usb@1.0-service.xml)"). usb is provided by
+    # the AOSP android.hardware.usb@1.0-service we build (ref/PRODUCT_PACKAGES-provider-evidence.txt;
+    # the F.26 harvest ships no usb HAL binary), so manifest.xml must NOT re-declare it as hwbinder.
+    # health/power stay declared as PASSTHROUGH in manifest.xml — a different transport from their
+    # service fragments' binder entries; checkvintf accepted that pairing in the same run.
+    if re.search(r'<name>android\.hardware\.usb</name>\s*<transport>hwbinder</transport>', manifest):
+        issues.append('manifest.xml declares android.hardware.usb as hwbinder — duplicates the '
+                      "module's own fragment (checkvintf Conflicting FqInstance, build 20261102_121332)")
 
     # 8. VINTF: warn about ancient interfaces (may not exist in A16)
     compat_matrix = f'{DT}/compatibility_matrix.xml'

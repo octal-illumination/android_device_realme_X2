@@ -1412,18 +1412,22 @@ def c50():
     for critical_hal in ['android.hardware.audio', 'android.hardware.camera.provider', 'android.hardware.keymaster']:
         if critical_hal not in manifest:
             issues.append(f'manifest missing critical HAL: {critical_hal}')
-    # Self-registering HALs ship their own VINTF fragment. Evidence (build 20261102_121332 +
-    # 20261102_125223): re-declaring the module's OWN instance in manifest.xml is a HARD checkvintf
-    # failure ("Conflicting FqInstance"), and transport does NOT save it — usb failed as hwbinder vs
-    # hwbinder, health failed as passthrough vs hwbinder. Both are provided by modules we build
-    # (ref/PRODUCT_PACKAGES-provider-evidence.txt; the F.26 harvest ships neither HAL binary), so
-    # manifest.xml must NOT declare android.hardware.usb or android.hardware.health at all.
-    # power is exempt: manifest declares HIDL @1.3 passthrough while the installed fragment
-    # (power.xml) is AIDL V6 — different interfaces, no overlap (verified in 125223's fragment set).
-    for _hal in ('android.hardware.usb', 'android.hardware.health'):
+    # Self-registering HALs ship their own VINTF fragment. Evidence (builds 20261102_121332,
+    # 125223, 131916): manifest.xml must NOT declare usb, health, or power.
+    # - usb (121332) and health (125223): re-declaring the module's own instance is a HARD
+    #   "Conflicting FqInstance" failure; transport does NOT save it (usb hwbinder-vs-hwbinder,
+    #   health passthrough-vs-hwbinder). Both are provided by modules we build
+    #   (ref/PRODUCT_PACKAGES-provider-evidence.txt; the F.26 harvest ships neither HAL binary).
+    # - power (131916): a THIRD distinct failure class — HIDL @1.3 passthrough entry had no
+    #   duplicate fragment but no FCM coverage either (A16 FCMs list power as AIDL only);
+    #   checkvintf --check-compat failed "not specified in framework compatibility matrix".
+    #   We ship no HIDL power passthrough impl; power-service-qti registers its own AIDL fragment.
+    #   (Full-FCM scan of all 94 manifest entries: power was the ONLY uncovered instance.)
+    for _hal in ('android.hardware.usb', 'android.hardware.health', 'android.hardware.power'):
         if f'<name>{_hal}</name>' in manifest:
-            issues.append(f'manifest.xml declares {_hal} — duplicates the module\'s own fragment '
-                          '(checkvintf Conflicting FqInstance; builds 20261102_121332/125223)')
+            issues.append(f'manifest.xml declares {_hal} — usb/health duplicate the module\'s own '
+                          'fragment (Conflicting FqInstance, 121332/125223); power HIDL has no FCM '
+                          'coverage at A16 (131916)')
 
     # 8. VINTF: warn about ancient interfaces (may not exist in A16)
     compat_matrix = f'{DT}/compatibility_matrix.xml'

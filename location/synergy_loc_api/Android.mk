@@ -15,7 +15,8 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     libcutils \
     libdl \
-    liblog
+    liblog \
+    libprocessgroup
 
 LOCAL_STATIC_LIBRARIES := \
     libgnss_loc_core_static \

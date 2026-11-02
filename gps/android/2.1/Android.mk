@@ -63,6 +63,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_SHARED_LIBRARIES += \
     libdl \
     liblocation_api \
+    libprocessgroup \
 
 LOCAL_CFLAGS += $(GNSS_CFLAGS)
 LOCAL_STATIC_LIBRARIES := liblocbatterylistener

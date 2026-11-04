@@ -3725,7 +3725,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -5053,6 +5053,65 @@ def c111_c112():
         ('; '.join(bad) + ' — sizes must match ref/partition-census.txt (rawprogram census); '
          'partitions absent from the census must not build separate images (build 20261102_094027)') if bad
         else f'{len(declared_size)} size(s) and {len(declared_fstype)} FS type(s) checked against the census, 0 mismatches')
+# Note: This code is purely AI-generated.
+# --- C113: no Kconfig symbol may be REDEFINED WITH A DIFFERENT TYPE -----------------------------------
+# History (2026-11-02, green build 20261102_135032): the kernel emitted 3+ warnings
+#   drivers/power/oppo/Kconfig:14:warning: ignoring type redefinition of 'OPLUS_SHORT_C_BATT_CHECK'
+#     from 'tristate' to 'boolean'
+# because drivers/power/Kconfig defines the OPLUS_SHORT_* symbols (tristate) and
+# `source "drivers/power/oppo/Kconfig"` re-declares them (bool). Kconfig keeps the FIRST definition,
+# so a re-declared block is dead text whose only function is to warn — and to mislead: the type a
+# reader sees is NOT the effective one. Fix applied today: the duplicate blocks removed from
+# drivers/power/oppo/Kconfig. Same-type redefinitions across QCA per-variant directories
+# (hundreds in this tree) are silent-merged and harmless, and are NOT flagged — only a MISMATCHED
+# type is, which is the mislead class. Scoped to OUR kernel tree; X2_LINT_KERNEL overrides for tests.
+# Negative-tested against a synthetic tree re-carrying the tristate-vs-bool duplication.
+_KERNEL_KCFG = os.environ.get('X2_LINT_KERNEL') or f'{ROOT}/roms/common/kernel/sm6150'
+_KCFG_TYPES = ('bool', 'tristate', 'string', 'hex', 'int')
+
+
+def c113():
+    if not os.path.isdir(_KERNEL_KCFG):
+        info('C113 Kconfig type redefinition', 'kernel tree absent — gate skipped')
+        return
+    types = {}   # symbol -> [ "type@file", ... ]
+    conflicts = []
+    # Only the ACTIVE per-arch Kconfig set is scanned: for this arm64 tree arch/arm64 is
+    # authoritative, other arches (arch/arm, arch/x86, ...) are never sourced — their duplicates
+    # are cross-arch by design (ARCH_QCOM etc.) and not part of our build.
+    for path in sorted(glob.glob(f'{_KERNEL_KCFG}/**/Kconfig*', recursive=True)):
+        rel = os.path.relpath(path, _KERNEL_KCFG)
+        if rel.startswith(('arch/',)) and not rel.startswith(('arch/arm64', 'arch/Kconfig')):
+            continue
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            cur = None
+            cur_type = None
+            for line in fh:
+                s = line.strip()
+                m = re.match(r'(?:config|menuconfig)\s+([A-Z0-9_]+)\s*$', s)
+                if m:
+                    if cur and cur_type and cur_type in _KCFG_TYPES:
+                        types.setdefault(cur, []).append(f'{cur_type}@{os.path.relpath(path, _KERNEL_KCFG)}')
+                    cur, cur_type = m.group(1), None
+                    continue
+                if cur is None:
+                    continue
+                for t in _KCFG_TYPES:
+                    if s.startswith(t) or s.startswith(f'default {t}') or s.startswith(f'{t} "'):
+                        cur_type = t
+                        break
+            if cur and cur_type and cur_type in _KCFG_TYPES:  # EOF flush (the negative test's lesson)
+                types.setdefault(cur, []).append(f'{cur_type}@{os.path.relpath(path, _KERNEL_KCFG)}')
+    for sym, lst in sorted(types.items()):
+        if len({t.split('@')[0] for t in lst}) > 1:
+            conflicts.append(f'{sym}: {" vs ".join(lst)}')
+    chk('C113 no Kconfig symbol redefined with a mismatched type (kernel tree)',
+        not conflicts,
+        ('; '.join(conflicts[:5]) + (f' (+{len(conflicts) - 5} more)' if len(conflicts) > 5 else '')
+         + ' — Kconfig keeps the FIRST definition, so the visible type is not the effective one'
+           ' (drives/power/oppo vs drivers/power, build 20261102_135032: tristate-then-bool'
+           ' redefinition warnings). Delete the mismatched-type block in the LATER sourced file.') if conflicts
+        else f'{sum(len(v) for v in types.values())} typed definition(s) across the kernel tree Kconfigs, 0 type conflicts')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

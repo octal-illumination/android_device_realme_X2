@@ -3810,6 +3810,7 @@ def c87():
              'output-history.md', 'SESSION_STATE.md', 'STATE-CLAIMS.md', 'researched-ideas.md')
     canonical = f'{ROOT}/logs'
     exempt = ('/ci/', '/kernel', '/sources/', 'kernel-bridge-root', 'kernel-src', '/docs/research/',
+              '/tools/edl/',  # vendored upstream tools (qdl, oppo_decrypt, …) ship their own CHANGELOGs — upstream trees we do not own (LL-049 exception class, cited 2026-11-05)
               '/archived/', '/tmp/', '/third_party/', '/external/', '/.git/')
     strays = []
     for nm in names:

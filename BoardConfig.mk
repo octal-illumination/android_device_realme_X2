@@ -87,6 +87,15 @@ BOARD_KERNEL_TAGS_OFFSET := 0x00000100
 BOARD_RAMDISK_OFFSET := 0x01000000
 TARGET_KERNEL_SOURCE := kernel/realme/sm6150
 TARGET_KERNEL_CONFIG := X2_defconfig
+# NOTE (2026-11-06, octal-illumination): pin the kernel build clang. LOS's default kernel clang
+# moved (LOS 23.2-era default r563880 -> LOS 24.0-era r596125/LLVM 21), and LLVM 21 hard-rejects
+# this 4.14 kernel's arm64 asm (spinlock.h "I" (1 << TICKET_SHIFT); stack_pointer.h asm("sp")
+# global register). LineageOS's own sm6150 4.14 kernel @lineage-24.0 ships the identical code, so
+# the intended way to build this kernel is the pinned older clang — the knob LOS documents in
+# BoardConfigKernel.mk. Evidence: A16 bake compiled this exact kernel with clang-r563880
+# (build log 20261031_194313); r596125 failed (build log 20261105_194150). Affects the kernel
+# build only; framework keeps the LOS default clang.
+TARGET_KERNEL_CLANG_VERSION := r563880
 BOARD_BOOTIMG_HEADER_VERSION := 1
 
 BOARD_MKBOOTIMG_ARGS := --ramdisk_offset $(BOARD_RAMDISK_OFFSET)

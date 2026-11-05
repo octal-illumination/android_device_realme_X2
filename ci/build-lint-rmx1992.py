@@ -2273,6 +2273,24 @@ def c60():
 # so they are unbuildable - LL-021/LL-030. The 21 refs were rewritten to our own shipped modules -
 # was found only by manual investigation of C60 output.
 # Resolution order: modules we define -> base module caches -> curated core-module list.
+#   PLUS (2026-11-05, A17 port): soong-GENERATED versioned AIDL backends. An aidl_interface
+#   named N with frozen versions 1..n generates N-V1..N-Vn with -ndk/-cpp/-c backend
+#   suffixes; those names NEVER appear as literal `name:` entries, so the caches can never
+#   contain them (this produced a false C61 failure for android.hardware.light-V3-ndk).
+#   If the base interface name N is in the base caches, its versioned backends are
+#   real: the A17 platform hardware/interfaces/light/aidl/Android.bp declares
+#   aidl_interface "android.hardware.light" with versions_with_info [1, 2, 3] ->
+#   android.hardware.light-V3-ndk exists. A future-version reference would still fail
+#   loudly in the real soong build — C61's job (pruned/missing providers) is not weakened:
+#   generated backends live in the same tree as their interface, never pruned separately.
+def aidl_backend_in_base(dep, base):
+    """True if dep is a soong-generated versioned AIDL backend (N-V<n>-ndk/-cpp/-c)
+    whose interface name N is in the base caches. Cited mechanism fix, 2026-11-05
+    (false positive: android.hardware.light-V3-ndk, platform hardware/interfaces)."""
+    m = re.fullmatch(r'(.+?)-V(\d+)-(ndk|cpp|c)', dep)
+    return bool(m) and m.group(1) in base
+
+
 def c61():
     def refset(fn):
         try:
@@ -2312,7 +2330,8 @@ def c61():
                 for d in re.findall(r'"([^"]+)"', m.group(1)):
                     deps.setdefault(d, set()).add(os.path.relpath(f, ROOT))
 
-    unresolved = {d: v for d, v in deps.items() if d not in ours and d not in base}
+    unresolved = {d: v for d, v in deps.items() if d not in ours and d not in base
+                  and not aidl_backend_in_base(d, base)}
     chk('C61 build-dependency resolution (shared/static/header libs)', not unresolved,
         (f'{len(unresolved)} of {len(deps)} declared dependency name(s) resolve to NO known module: '
          + ', '.join(f'{d} <- {sorted(v)[0]}' for d, v in sorted(unresolved.items())[:8]))

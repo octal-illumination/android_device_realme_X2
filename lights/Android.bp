@@ -15,7 +15,7 @@
 cc_binary {
     name: "android.hardware.light-service.x2",
     relative_install_path: "hw",
-    defaults: ["aidl_defaults"],
+    cflags: ["-Wall", "-Werror", "-Wextra"],
     vendor: true,
     vintf_fragments: ["android.hardware.light-service.x2.xml"],
     init_rc: ["android.hardware.light-service.x2.rc"],
@@ -26,5 +26,4 @@ cc_binary {
         "libbinder_ndk",
         "liblog",
     ],
-    cflags: ["-Wall", "-Werror"],
 }

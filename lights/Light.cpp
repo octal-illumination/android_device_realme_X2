@@ -1,17 +1,6 @@
 /*
  * Copyright (C) 2018 The LineageOS Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #define LOG_TAG "LightsService"
@@ -22,11 +11,10 @@
 #include <android-base/stringprintf.h>
 #include <fstream>
 
+namespace aidl {
 namespace android {
 namespace hardware {
 namespace light {
-namespace V2_0 {
-namespace implementation {
 
 /*
  * Write value to path and close file.
@@ -54,7 +42,7 @@ static constexpr int kDefaultMaxBrightness = 255;
 static constexpr int kRampSteps = 50;
 static constexpr int kRampMaxStepDurationMs = 5;
 
-static uint32_t getBrightness(const LightState& state) {
+static uint32_t getBrightness(const HwLightState& state) {
     uint32_t alpha, red, green, blue;
 
     // Extract brightness from AARRGGBB
@@ -75,21 +63,25 @@ static uint32_t getBrightness(const LightState& state) {
     return (77 * red + 150 * green + 29 * blue) >> 8;
 }
 
-static uint32_t rgbToBrightness(const LightState& state) {
+static uint32_t rgbToBrightness(const HwLightState& state) {
     uint32_t color = state.color & 0x00ffffff;
     return ((77 * ((color >> 16) & 0xff))
             + (150 * ((color >> 8) & 0xff))
             + (29 * (color & 0xff))) >> 8;
 }
 
-Light::Light() {
-    mLights.emplace(Type::ATTENTION, std::bind(&Light::handleNotification, this, std::placeholders::_1, 0));
-    mLights.emplace(Type::BACKLIGHT, std::bind(&Light::handleBacklight, this, std::placeholders::_1));
-    mLights.emplace(Type::BATTERY, std::bind(&Light::handleNotification, this, std::placeholders::_1, 1));
-    mLights.emplace(Type::NOTIFICATIONS, std::bind(&Light::handleNotification, this, std::placeholders::_1, 2));
+Lights::Lights() {
+    /* Stable ids: 0 BACKLIGHT, 1 BATTERY, 2 NOTIFICATIONS, 3 ATTENTION.
+     * The three notification-class lights share the white LED and the
+     * priority logic in handleNotification (indices 0..2 mirror the
+     * historical HIDL implementation). */
+    mLights.emplace(0, std::bind(&Lights::handleBacklight, this, std::placeholders::_1));
+    mLights.emplace(1, std::bind(&Lights::handleNotification, this, std::placeholders::_1, 1));
+    mLights.emplace(2, std::bind(&Lights::handleNotification, this, std::placeholders::_1, 2));
+    mLights.emplace(3, std::bind(&Lights::handleNotification, this, std::placeholders::_1, 0));
 }
 
-void Light::handleBacklight(const LightState& state) {
+void Lights::handleBacklight(const HwLightState& state) {
     int maxBrightness = get("/sys/class/backlight/panel0-backlight/max_brightness", -1);
     if (maxBrightness < 0) {
         maxBrightness = kDefaultMaxBrightness;
@@ -101,10 +93,10 @@ void Light::handleBacklight(const LightState& state) {
     set("/sys/class/backlight/panel0-backlight/brightness", brightness);
 }
 
-void Light::handleNotification(const LightState& state, size_t index) {
+void Lights::handleNotification(const HwLightState& state, size_t index) {
     mLightStates.at(index) = state;
 
-    LightState stateToUse = mLightStates.front();
+    HwLightState stateToUse = mLightStates.front();
     for (const auto& lightState : mLightStates) {
         if (lightState.color & 0xffffff) {
             stateToUse = lightState;
@@ -114,8 +106,8 @@ void Light::handleNotification(const LightState& state, size_t index) {
 
     uint32_t whiteBrightness = getBrightness(stateToUse);
 
-    uint32_t onMs = stateToUse.flashMode == Flash::TIMED ? stateToUse.flashOnMs : 0;
-    uint32_t offMs = stateToUse.flashMode == Flash::TIMED ? stateToUse.flashOffMs : 0;
+    uint32_t onMs = stateToUse.flashMode == FlashMode::TIMED ? stateToUse.flashOnMs : 0;
+    uint32_t offMs = stateToUse.flashMode == FlashMode::TIMED ? stateToUse.flashOffMs : 0;
 
     auto getScaledDutyPercent = [](int brightness) -> std::string {
         std::string output;
@@ -155,11 +147,11 @@ void Light::handleNotification(const LightState& state, size_t index) {
     }
 }
 
-Return<Status> Light::setLight(Type type, const LightState& state) {
-    auto it = mLights.find(type);
+ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) {
+    auto it = mLights.find(id);
 
     if (it == mLights.end()) {
-        return Status::LIGHT_NOT_SUPPORTED;
+        return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
     }
 
     // Lock global mutex until light state is updated.
@@ -167,23 +159,29 @@ Return<Status> Light::setLight(Type type, const LightState& state) {
 
     it->second(state);
 
-    return Status::SUCCESS;
+    return ndk::ScopedAStatus::ok();
 }
 
-Return<void> Light::getSupportedTypes(getSupportedTypes_cb _hidl_cb) {
-    std::vector<Type> types;
-
+ndk::ScopedAStatus Lights::getLights(std::vector<HwLight>* _aidl_return) {
+    int id = 0;
     for (auto const& light : mLights) {
-        types.push_back(light.first);
+        HwLight hwLight;
+        hwLight.id = id++;
+        hwLight.type = static_cast<LightType>(light.first);
+        _aidl_return->push_back(hwLight);
     }
-
-    _hidl_cb(types);
-
-    return Void();
+    return ndk::ScopedAStatus::ok();
 }
 
-}  // namespace implementation
-}  // namespace V2_0
+ndk::ScopedAStatus Lights::setLightEffects(
+        const std::vector<::aidl::android::hardware::light::HwLightEffect>& /* effects */) {
+    /* The A17 ILights surface grew setLightEffects (light AIDL v2+); this
+     * device has no effects engine — the historical sysfs ramping path in
+     * setLightState covers everything notifications need. */
+    return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
+}
+
 }  // namespace light
 }  // namespace hardware
 }  // namespace android
+}  // namespace aidl

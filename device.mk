@@ -164,9 +164,13 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 SYSTEM_OPTIMIZE_JAVA := true
 SYSTEMUI_OPTIMIZE_JAVA := true
 
-# Fingerprint
+# Fingerprint — the HIDL wrapper service is excluded on the A17 line: the platform
+# removed android.hardware.biometrics.fingerprint@2.x HIDL libs (light/biometrics went
+# AIDL-only), and no AIDL shim for the Oplus HIDL HAL exists yet (plan D9: deferred;
+# fingerprint is optional per the A17 FCM — the device boots without it).
+# [a17-fingerprint-deferred] android.hardware.biometrics.fingerprint@2.3-service.x2
+# The Oplus HIDL extension interface stays (inert impl lib; keeps the hwservice type real):
 PRODUCT_PACKAGES += \
-    android.hardware.biometrics.fingerprint@2.3-service.x2 \
     vendor.oplus.hardware.biometrics.fingerprint@2.1
 
 # DRM
@@ -259,7 +263,7 @@ PRODUCT_PACKAGES += \
 
 # Lights
 PRODUCT_PACKAGES += \
-    android.hardware.light@2.0-service.x2
+    android.hardware.light-service.x2
 
 # Media
 PRODUCT_PACKAGES += \

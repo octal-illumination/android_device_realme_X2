@@ -13,33 +13,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-cc_binary {
-    name: "android.hardware.biometrics.fingerprint@2.3-service.x2",
-    defaults: ["hidl_defaults"],
-    init_rc: ["android.hardware.biometrics.fingerprint@2.3-service.x2.rc"],
-    vintf_fragments: ["android.hardware.biometrics.fingerprint@2.3-service.x2.xml"],
-    relative_install_path: "hw",
-    proprietary: true,
-    srcs: [
-        "service.cpp",
-        "BiometricsFingerprint.cpp",
-    ],
-    cflags: [
-        "-Wno-unused-parameter",
-    ],
-    shared_libs: [
-        "libbase",
-        "libhidlbase",
-        "liblog",
-        "libutils",
-        "android.hardware.biometrics.fingerprint@2.1",
-        "android.hardware.biometrics.fingerprint@2.2",
-        "android.hardware.biometrics.fingerprint@2.3",
-        "vendor.oplus.hardware.biometrics.fingerprint@2.1",
-    ],
-}
-
-cc_library_static {
+// [a17-fingerprint-deferred] cc_binary {
+// [a17-fingerprint-deferred]     name: "android.hardware.biometrics.fingerprint@2.3-service.x2",
+// [a17-fingerprint-deferred]     defaults: ["hidl_defaults"],
+// [a17-fingerprint-deferred]     init_rc: ["android.hardware.biometrics.fingerprint@2.3-service.x2.rc"],
+// [a17-fingerprint-deferred]     vintf_fragments: ["android.hardware.biometrics.fingerprint@2.3-service.x2.xml"],
+// [a17-fingerprint-deferred]     relative_install_path: "hw",
+// [a17-fingerprint-deferred]     proprietary: true,
+// [a17-fingerprint-deferred]     srcs: [
+// [a17-fingerprint-deferred]         "service.cpp",
+// [a17-fingerprint-deferred]         "BiometricsFingerprint.cpp",
+// [a17-fingerprint-deferred]     ],
+// [a17-fingerprint-deferred]     cflags: [
+// [a17-fingerprint-deferred]         "-Wno-unused-parameter",
+// [a17-fingerprint-deferred]     ],
+// [a17-fingerprint-deferred]     shared_libs: [
+// [a17-fingerprint-deferred]         "libbase",
+// [a17-fingerprint-deferred]         "libhidlbase",
+// [a17-fingerprint-deferred]         "liblog",
+// [a17-fingerprint-deferred]         "libutils",
+// [a17-fingerprint-deferred]         "android.hardware.biometrics.fingerprint@2.1",
+// [a17-fingerprint-deferred]         "android.hardware.biometrics.fingerprint@2.2",
+// [a17-fingerprint-deferred]         "android.hardware.biometrics.fingerprint@2.3",
+// [a17-fingerprint-deferred]         "vendor.oplus.hardware.biometrics.fingerprint@2.1",
+// [a17-fingerprint-deferred]     ],
+// [a17-fingerprint-deferred] }
+// [a17-fingerprint-deferred] 
+// [a17-fingerprint-deferred] cc_library_static {
     name: "libudfps_extension.x2",
     srcs: ["UdfpsExtension.cpp"],
     include_dirs: [

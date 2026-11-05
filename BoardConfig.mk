@@ -87,17 +87,11 @@ BOARD_KERNEL_TAGS_OFFSET := 0x00000100
 BOARD_RAMDISK_OFFSET := 0x01000000
 TARGET_KERNEL_SOURCE := kernel/realme/sm6150
 TARGET_KERNEL_CONFIG := X2_defconfig
-# NOTE (2026-11-06, octal-illumination): pin the kernel build clang. LOS's default kernel clang
-# moved (LOS 23.2-era default r563880c -> LOS 24.0-era r596125), and newer clang hard-rejects
-# this 4.14 kernel's arm64 asm (spinlock.h "I" (1 << TICKET_SHIFT); stack_pointer.h asm("sp")
-# global register). LineageOS's own sm6150 4.14 kernel @lineage-24.0 ships the identical code, so
-# the intended way to build this kernel is the pinned A16-era clang — the knob LOS documents in
-# BoardConfigKernel.mk. Evidence: A16 bake compiled this exact kernel with clang-r563880c
-# (build log 20261031_194313); r596125 failed (build log 20261105_194150). NOTE the trailing
-# "c" — clang-r563880 (no suffix) does NOT exist in the prebuilts and yields an empty dir
-# (build 6, 20261105_214846: ccache 'Could not find compiler clang'). Affects the kernel
-# build only; framework keeps the LOS default clang.
-TARGET_KERNEL_CLANG_VERSION := r563880c
+# NOTE (2026-11-06, octal-illumination): pin REMOVED — it was derived from a wrong conclusion
+# (the A16 log's clang-r563880c hits were not kernel-compile commands; "broken .inst" absence
+# there shows the A16 kernel used a different toolchain path). Reproduced on the host: EVERY
+# clang in the prebuilts (r547379..r596125) rejects this kernel's arm64 asm identically, so the
+# real fix is the kernel asm itself (patches 0003/0004, recorded in the manifests repo patches/).
 BOARD_BOOTIMG_HEADER_VERSION := 1
 
 BOARD_MKBOOTIMG_ARGS := --ramdisk_offset $(BOARD_RAMDISK_OFFSET)

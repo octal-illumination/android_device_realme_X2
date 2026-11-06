@@ -3744,7 +3744,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114, c115, c116, c117, c118, c119):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114, c115, c116, c117, c118, c119, c120):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -5523,6 +5523,72 @@ def c119():
         if wrong
         else (f'{len(defaults)} repo(s) checked against {declared}'
               f' (record taken {st.get("checked", "?")})'))
+# Note: This code is purely AI-generated.
+# --- C120: a launched build must have a watcher (no unattended builds) -------------------------------
+# User directive, repeated (2026-11-06): "You are still waiting for build status until time out, while the
+# build failed minutes ago, when are you ever going to learn from this?" The behaviour was the symptom; the
+# structure was the cause: a build could be launched without anything watching it, so the only way to learn
+# its outcome was to poll by hand - and a hand poll is a guessed interval, which is a blind wait.
+#
+# Two structural changes: rebuild-cycle.sh now starts the watcher itself, and watch-build.sh writes a
+# terminal marker (<watch log>.done) that tools/server/wait-build.sh returns the instant it appears (with a
+# log-derived fallback for runs whose watcher predates the marker, so no caller ever has to time out).
+#
+# This gate keeps the first half honest: every unit the cycle launched must have a watcher log. A build that
+# ran unwatched is a build whose failure could sit unnoticed, which is exactly what happened.
+def c120():
+    # cycle logs are written under the ROM workstream's ledger dir (roms/logs/build/) and, for older runs,
+    # the project logs dir: scan both, newest first
+    cycles = sorted(glob.glob(f'{ROOT}/roms/logs/build/los24-cycle-*.log')
+                    + glob.glob(f'{ROOT}/logs/build/los24-cycle-*.log'),
+                    key=lambda p: os.path.getmtime(p), reverse=True)
+    if not cycles:
+        info('C120 every launched build has a watcher', 'no cycle logs recorded yet')
+        return
+    # Only cycles that POSTDATE the wiring can be expected to have watchers. The wiring is identified by the
+    # marker comment in rebuild-cycle.sh and dated by that file's mtime, so this stays correct without anyone
+    # maintaining a list: cycles older than the fix are history (and are reported as such, briefly).
+    cyc = f'{ROOT}/roms/common/tools/rebuild-cycle.sh'
+    try:
+        wired = 'UNATTENDED BUILD PREVENTION' in open(cyc, encoding='utf-8', errors='replace').read()
+        cutoff = os.path.getmtime(cyc) if wired else None
+    except OSError:
+        wired, cutoff = False, None
+    if not wired:
+        info('C120 every launched build has a watcher',
+             'rebuild-cycle.sh does not start watchers — fix that before trusting this gate')
+        return
+    legacy = [c for c in cycles if os.path.getmtime(c) < cutoff]
+    cycles = [c for c in cycles if os.path.getmtime(c) >= cutoff]
+    if legacy:
+        info('C120 pre-wiring cycles excluded',
+             f'{len(legacy)} cycle log(s) predate the auto-watcher and are not held to it')
+    if not cycles:
+        info('C120 every launched build has a watcher', 'no cycle has run since the watcher wiring landed')
+        return
+    missing, checked = [], 0
+    for c in cycles[:8]:                      # recent cycles only: older ones predate the auto-watcher
+        try:
+            text = open(c, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        units = re.findall(r'launched as unit\s+(x2build-[0-9_]+)', text)
+        for u in units:
+            checked += 1
+            if not (os.path.isfile(f'{ROOT}/logs/build/watch-{u}.log')
+                    or os.path.isfile(f'{ROOT}/roms/logs/build/watch-{u}.log')):
+                missing.append(f'{os.path.basename(c)}: {u}')
+    if checked == 0:
+        info('C120 every launched build has a watcher', 'no build unit recorded in the recent cycle logs')
+        return
+    chk('C120 every launched build has a watcher', not missing,
+        (f'{len(missing)} launched build(s) with no watcher log: ' + ', '.join(missing[:4])
+         + ' — an unwatched build has no terminal marker, so its outcome can only be learned by polling by'
+         ' hand, and a hand poll is a guessed interval: that is how a failure sat unnoticed for ten minutes.'
+         ' rebuild-cycle.sh starts the watcher itself; if this fires, that wiring is broken.')
+        if missing
+        else (f'{checked} launched build(s) across the recent cycles, each with a watcher log;'
+              ' wait-build.sh returns the verdict the moment the watcher writes it'))
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

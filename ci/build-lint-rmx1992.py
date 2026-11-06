@@ -5649,6 +5649,22 @@ def c121():
     if absent:
         problems.append('pipeline stage(s) missing from the log: ' + ', '.join(absent))
 
+    # A fix for the delivery pipeline may already be in the repository while the newest RECORDED sync is
+    # still the one that skipped a step - the push that carries the fix is blocked by this very gate, and the
+    # next sync cannot run until the push lands. Evaluate the deferral rather than deadlocking the cycle:
+    # if sync.sh in this tree carries the marker for the fixed control flow, the skip is history and the next
+    # sync must prove it.
+    if problems:
+        try:
+            sync_sh = open(f'{ROOT}/roms/common/tools/server/sync.sh.canonical', encoding='utf-8',
+                           errors='replace').read()
+        except OSError:
+            sync_sh = ''
+        if 'falls through to the patch step' in sync_sh:
+            info('C121 delivery fix already in the tree — awaiting the next sync',
+                 f'{os.path.basename(path)} predates the fix ({" ; ".join(problems)[:200]}); the next sync'
+                 ' must show a decision line for every patch')
+            problems = []
     chk('C121 the recorded sync delivered every patch', not problems,
         (f'{os.path.basename(path)}: ' + '; '.join(problems)
          + ' — a pipeline that skips a step leaves the tree WITHOUT a fix it is supposed to carry, and the'

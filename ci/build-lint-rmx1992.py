@@ -3744,7 +3744,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -5132,6 +5132,78 @@ def c113():
            ' (drives/power/oppo vs drivers/power, build 20261102_135032: tristate-then-bool'
            ' redefinition warnings). Delete the mismatched-type block in the LATER sourced file.') if conflicts
         else f'{sum(len(v) for v in types.values())} typed definition(s) across the kernel tree Kconfigs, 0 type conflicts')
+# Note: This code is purely AI-generated.
+# --- C114: a GREEN build must not ship unsigned / uninstalled kernel modules -------------------------
+# History (2026-11-06): build 14 ended `BUILD EXIT=0` / `Package Complete`, and the ROM was archived as
+# "verified clean". A full line-by-line triage of its log found that ALL THREE kernel modules had failed
+# to sign and install (`Makefile.modinst: Error 3` x3, preceded by `sign-file: ... only supports SHA1
+# signing`), leaving every `.ko` unsigned, `modules.load` empty and the depmod map incomplete. With
+# MODULE_SIG_FORCE=y the kernel then refuses to load them, so the features they carry were absent at
+# runtime while every build-level signal said "success".
+#
+# Why a gate and not just the fix: the module-install step is not on `mka bacon`'s critical path, so
+# nothing in the pipeline can notice by construction. C102 already enforces "a FAILED log must be fully
+# triaged"; this is its counterpart for a SUCCESSFUL log — the artifact can be wrong in ways the exit
+# code cannot see. The defect survived because a green build was trusted, so the trust is what gets
+# checked.
+#
+# Decidable from the mirrored log alone (the build host's artifact is not reachable from this VM), and
+# each marker below is a line the failing build actually contained.
+MODULE_DEFECT_MARKERS = (
+    (r'Makefile\.modinst:\d+: .*Error\s+\d+', 'a kernel module failed to install'),
+    (r'sign-file: .*only supports SHA1 signing', 'the module signer cannot use the configured digest'),
+)
+# DELIBERATELY NOT a marker (measured 2026-11-06, would be a permanent false positive):
+#   'depmod: WARNING: could not open modules.order|modules.builtin'
+# The Android build stages ONLY the .ko files into depmod_vendor_intermediates/lib/modules/0.0 and runs
+# depmod there; modules.order / modules.builtin / modules.builtin.modinfo are kernel-BUILD artifacts that
+# the staging step does not copy, so depmod warns regardless of module health. Verified on the repaired
+# build: the fixed log still carries 4 of these warnings while every module installed, signed and shipped.
+# They are recorded as an INFO instead, so the information stays visible without failing a good build.
+
+
+def c114():
+    logs = sorted(glob.glob(f'{ROOT}/logs/build/*.log') + glob.glob(f'{ROOT}/logs/error/*.log'),
+                  key=lambda p: os.path.getmtime(p), reverse=True)
+    green = None
+    for p in logs:
+        try:
+            tail = open(p, encoding='utf-8', errors='replace').read()[-20000:]
+        except OSError:
+            continue
+        m = re.search(r'BUILD EXIT=(\d+)', tail)
+        if m and m.group(1) == '0':
+            green = p
+            break
+    if not green:
+        info('C114 the newest green build ships signed modules',
+             'no archived build log records BUILD EXIT=0 yet — nothing to judge')
+        return
+    try:
+        text = open(green, encoding='utf-8', errors='replace').read()
+    except OSError:
+        info('C114 the newest green build ships signed modules', f'{os.path.basename(green)} unreadable')
+        return
+    hits = []
+    for pat, why in MODULE_DEFECT_MARKERS:
+        found = re.findall(pat, text)
+        if found:
+            hits.append(f'{why} ({len(found)}x)')
+    built = re.search(r'MODPOST (\d+) modules', text)
+    installed = len(re.findall(r'^  INSTALL .*\.ko$', text, re.M))
+    seen = f'{built.group(1) if built else "?"} module(s) built, {installed} installed'
+    depmod_warns = len(re.findall(r'depmod: WARNING: could not open modules\.', text))
+    chk('C114 the newest green build ships signed modules', not hits,
+        (f'{os.path.basename(green)} records BUILD EXIT=0 but its log shows: ' + '; '.join(hits)
+         + f' ({seen}) — a green build whose modules never installed ships an artifact whose features are'
+         ' absent at runtime, and MODULE_SIG_FORCE=y makes them unloadable. Fix the cause, then rebuild; do'
+         ' not treat the exit code as evidence the artifact is complete (failure-register class 18)')
+        if hits
+        else f'{os.path.basename(green)}: {seen}, no signing/install defect markers')
+    if depmod_warns:
+        info('C114 note — depmod staging warnings are benign-by-design',
+             f'{depmod_warns} "could not open modules.order|modules.builtin" warning(s): the Android depmod'
+             ' staging dir holds only .ko files, so those kernel-build artifacts are legitimately absent')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

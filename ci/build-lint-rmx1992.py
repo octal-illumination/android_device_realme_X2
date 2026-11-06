@@ -3744,7 +3744,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114, c115, c116, c117, c118, c119, c120):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114, c115, c116, c117, c118, c119, c120, c121, c122):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -5589,6 +5589,138 @@ def c120():
         if missing
         else (f'{checked} launched build(s) across the recent cycles, each with a watcher log;'
               ' wait-build.sh returns the verdict the moment the watcher writes it'))
+# Note: This code is purely AI-generated.
+# --- C121: the recorded sync must show the full pipeline AND a patch status for every patch ----------
+# User question (2026-11-06): "how are these mistakes not identified at the lint stage but only in build
+# stage?" The answer is a scope gap, and this gate closes it.
+#
+# C117 proves the patches are correct WHERE THEY ARE STORED: paths are tree-root-relative and each one
+# resolves against its tree. It cannot see the host, so it cannot know whether the pipeline actually
+# EXECUTED. Three regressions in one session all lived in that gap:
+#   * the patch loop sat before `repo sync`, and a sync that resets a project wiped the patch;
+#   * the loop was moved after the sync, but the sync's SUCCESS path did `exit 0` first, so patches were
+#     skipped exactly when the sync worked;
+#   * the pre-sync clean step discarded tracked edits - which is correct - and nothing re-applied them.
+# Each was invisible to every static check and surfaced only as a build failing on a defect we had already
+# fixed. The evidence existed the whole time: the sync log records every stage and every patch decision.
+#
+# So this gate reads the recorded sync and asserts the delivery happened:
+#   1. the pipeline stages are all present in order (overlay -> clean/sync -> patches -> exit);
+#   2. every patch in roms/lineage/manifests/patches/ has a status line (applied or already applied);
+#   3. no patch reported CANNOT APPLY.
+# A pipeline that skipped a step is a defect of the pipeline, and it is decidable from the log it wrote.
+def c121():
+    pdir = f'{ROOT}/roms/lineage/manifests/patches'
+    patches = sorted(os.path.basename(p) for p in glob.glob(f'{pdir}/*.patch'))
+    if not patches:
+        info('C121 the recorded sync delivered every patch', 'no patches to check')
+        return
+    logs = sorted(glob.glob(f'{ROOT}/logs/build/*sync*.log') + glob.glob(f'{ROOT}/roms/logs/build/*sync*.log'),
+                  key=lambda p: os.path.getmtime(p), reverse=True)
+    if not logs:
+        info('C121 the recorded sync delivered every patch',
+             'no mirrored sync log yet — the delivery cannot be verified from here')
+        return
+    path = logs[0]
+    try:
+        text = open(path, encoding='utf-8', errors='replace').read()
+    except OSError:
+        info('C121 the recorded sync delivered every patch', f'{os.path.basename(path)} unreadable')
+        return
+
+    # 1. no patch was refused
+    refused = re.findall(r'\*\*\* PATCH CANNOT APPLY: (\S+)', text)
+    # 2. every patch has a decision line
+    seen = set(re.findall(r'patch (?:already )?applied: (\S+)', text))
+    missing = [p for p in patches if p not in seen]
+    # 3. the pipeline ran its stages (a step that silently disappears is the class this gate is for)
+    stages = [('overlay', r'overlay (?:before|after)'),
+              ('sync',    r'attempt \d/3: repo sync|repo sync has finished'),
+              ('patches', r'patch (?:already )?applied:'),
+              ('exit',    r'=== SYNC EXIT=')]
+    absent = [name for name, pat in stages if not re.search(pat, text)]
+
+    problems = []
+    if refused:
+        problems.append('patch(es) refused: ' + ', '.join(refused[:3]))
+    if missing:
+        problems.append(f'{len(missing)} patch(es) with NO decision line in the sync: '
+                        + ', '.join(missing[:4]))
+    if absent:
+        problems.append('pipeline stage(s) missing from the log: ' + ', '.join(absent))
+
+    chk('C121 the recorded sync delivered every patch', not problems,
+        (f'{os.path.basename(path)}: ' + '; '.join(problems)
+         + ' — a pipeline that skips a step leaves the tree WITHOUT a fix it is supposed to carry, and the'
+         ' build then fails on a defect that was already solved (three regressions in one session: patches'
+         ' before the sync, an early `exit 0` on the success path, and a clean step with nothing'
+         ' re-applying afterwards). Static checks cannot see this; the log can.') if problems
+        else (f'{os.path.basename(path)}: all {len(patches)} patch(es) accounted for and every pipeline'
+              ' stage present'))# Note: This code is purely AI-generated.
+# --- C122: every failure-register class must name its gate (or say why it cannot have one) ------------
+# User question (2026-11-06), after the same class bit twice in one session: "why is it repeating if it was
+# sorted already, shouldn't this be in lint?" The honest answer is that nothing connected a *logged failure
+# class* to an *enforcing gate*. A class was recorded, an instance was fixed, and whether a gate appeared
+# afterwards depended on somebody remembering to write one. That is the definition of a convention rather
+# than a control (LL-050), and it is precisely how a class repeats.
+#
+# This gate makes the connection mechanical. Every class in the failure register must either:
+#   * name the gate(s) that enforce it (`C114`), or
+#   * be explicitly marked as not mechanically checkable, with the reason (`not mechanically checkable`).
+# A class with neither FAILS - so "it is sorted" can no longer mean "I fixed today's instance and moved on".
+# The register is the ledger of classes; the lint parts are the enforcement. When the two disagree, the
+# ledger says so.
+REGISTER_SPEC = 'not mechanically checkable'      # the only accepted exemption marker, with a reason beside it
+
+
+def c122():
+    path = f'{ROOT}/roms/docs/research/2026-10-29-build-failure-register.md'
+    if not os.path.isfile(path):
+        info('C122 every failure-register class names its gate',
+             'the failure register is absent — nothing to check against')
+        return
+    try:
+        lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
+    except OSError:
+        return
+
+    classes = []          # (label, text)
+    for i, ln in enumerate(lines):
+        m = re.match(r'\|\s*(\d+)\s*\|(.*)$', ln)
+        if m:
+            classes.append((f'class {m.group(1)}', ln))
+            continue
+        m = re.match(r'\*\*Class\s+(\d+)\s*[—-](.*)$', ln)
+        if m:
+            # the class text runs until a blank line or the next bold-class line
+            body = [ln]
+            for nxt in lines[i+1:i+8]:
+                if not nxt.strip() or nxt.startswith('**Class'):
+                    break
+                body.append(nxt)
+            classes.append((f'class {m.group(1)}', ' '.join(body)))
+
+    if not classes:
+        info('C122 every failure-register class names its gate',
+             'no class entries parsed — the register format changed, so this gate is checking nothing')
+        return
+
+    unenforced = []
+    for label, text in classes:
+        if re.search(r'\bC\d{1,3}\b', text):
+            continue
+        if REGISTER_SPEC in text.lower():
+            continue
+        unenforced.append(label)
+
+    chk('C122 every failure-register class names its gate', not unenforced,
+        (f'{len(unenforced)} failure class(es) with no gate and no "not mechanically checkable" reason: '
+         + ', '.join(unenforced[:8])
+         + f' (of {len(classes)} parsed) — a class that is recorded but not enforced is a class that will'
+         ' recur: that is how the same class bit twice in one session. Either add the gate that decides it,'
+         ' or mark it "' + REGISTER_SPEC + '" with the reason it cannot be decided mechanically.')
+        if unenforced
+        else f'{len(classes)} class(es): each names a gate or is marked not mechanically checkable')
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

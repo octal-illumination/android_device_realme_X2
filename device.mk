@@ -66,6 +66,16 @@ PRODUCT_COPY_FILES += \
 # X2-Fix (2026-10-21): dead PRODUCT_PACKAGES refs removed in prior commits: AntHalService-Soong,
 # libOmxAacEnc, libOmxAmrEnc, libOmxEvrcEnc, libOmxQcelp13Enc, libOmxG711Enc, libmm-omxcore
 # (no source in vanilla 23.2 sync set; F.26 ships only *Dec decoder blobs; official sm8150 omits them).
+# NOTE (2026-11-06, octal-illumination): the platform ships a ramdisk-build.prop soong module
+# (build/soong/Android.bp) that installs system/etc/ramdisk/build.prop into TARGET_RAMDISK_OUT, and
+# generic_ramdisk.mk requests it. This device does not inherit generic_ramdisk, so the module was never
+# requested: the boot ramdisk carried no build.prop, and releasetools reported
+# "Unable to get boot image timestamp: no system/etc/ramdisk/build.prop in ramdisk" on every build.
+# Request it explicitly rather than inheriting the whole generic_ramdisk package list, which also
+# carries init_first_stage/snapuserd_ramdisk/toolbox_ramdisk that this tree already provides.
+PRODUCT_PACKAGES += \
+    ramdisk-build.prop
+
 PRODUCT_PACKAGES += \
     com.dsi.ant@1.0.vendor
 

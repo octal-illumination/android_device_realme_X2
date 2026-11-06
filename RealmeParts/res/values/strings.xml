@@ -102,4 +102,12 @@
     <string name="smart_wake_gesture_title">Smart Wake</string>
     <string name="smart_wake_gesture_summary">Pulse notifications on slight motion of device and wake screen when picked up</string>
         
+    <!-- NOTE (2026-11-06, octal-illumination): DozeSettingsFragment.java references
+         doze_settings_help_title/doze_settings_help_text, which upstream moved out of the
+         default locale in packages/resources/devicesettings (they survive only in
+         translations there). Carried here so the app is self-contained — canonical
+         English text from LineageOS/android_packages_resources_devicesettings lineage-18.1. -->
+    <string name="doze_settings_help_title">Help</string>
+    <string name="doze_settings_help_text">These features use sensor events to launch a doze notification pulse. The chosen sensor is only enabled when the device receives a notification, this helps to reduce battery usage. There is also an option to enable the chosen sensor as soon as the screen turns off, this will cause higher battery usage.</string>
+
 </resources>

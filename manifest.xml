@@ -1,5 +1,11 @@
-<manifest version="2.0" type="device" target-level="5">
-    <kernel target-level="5" />
+<manifest version="2.0" type="device" target-level="7">
+    <!-- NOTE (2026-11-06, octal-illumination): target-level bumped 5 -> 7 and the stale
+         <kernel target-level="5"/> element removed. A17 no longer ships FCM 5/6 framework
+         matrices (only 7, 8 and the 202404+ mini-matrices), so check_vintf could not find
+         a framework matrix at the declared level (build 11: "Cannot find framework matrix
+         at FCM version 5"). Mirrors the official LOS pattern — e.g.
+         android_device_oneplus_sdm845-common bumped target-level 5 -> 7 and dropped the
+         kernel element on lineage-24.0. -->
     <hal format="hidl">
         <name>android.hardware.audio</name>
         <transport>hwbinder</transport>

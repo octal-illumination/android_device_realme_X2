@@ -3744,7 +3744,7 @@ def main():
     # X2_LINT_ONLY=C91,C92 restricts the run to those gate ids. Used by check-docs-current.sh so a
     # build launch can verify documentation currency in seconds instead of the whole suite.
     _only = [x.strip().upper() for x in os.environ.get('X2_LINT_ONLY', '').split(',') if x.strip()]
-    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114):
+    for fn in (c0, c1, c12, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33, c34, c35, c36, c37, c38, c39, c40, c41, c42, c43, c44, c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56, c57, c58, c59, c60, c61, c62, c63, c64, c17, c18, c19, c20, c2, c3, c4, c5, c6, c7, c8, c9, c10, c14, c21, c22, c13, c81, c82, c83, c84, c85, c86, c87, c88, c89, c90, c91, c92, c93, c94, c95, c96, c97, c98, c99, c100, c101, c102, c103, c104, c105, c106, c107, c108, c109, c110, c111_c112, c113, c114, c115, c116, c117, c118, c119):
         if _only and fn.__name__.upper() not in _only:
             continue
         try:
@@ -5204,6 +5204,325 @@ def c114():
         info('C114 note — depmod staging warnings are benign-by-design',
              f'{depmod_warns} "could not open modules.order|modules.builtin" warning(s): the Android depmod'
              ' staging dir holds only .ko files, so those kernel-build artifacts are legitimately absent')
+# Note: This code is purely AI-generated.
+# --- C115: the CI-visible declared line must equal the workspace's -----------------------------------
+# History (2026-11-06): the lint passed locally and GitHub CI failed, on the SAME commit. The cause was
+# not a code difference, it was an INPUT difference: CI resolves the declared build line from a fixture it
+# builds by cloning the tools repo, and that fixture hardcoded `lineage-23.2` long after the tree moved to
+# `lineage-24.0`. CI therefore linted a lineage-24.0 tree while declaring lineage-23.2, and C0 duly failed
+# the contradiction (a vendor pin whose ledger provenance is lineage-24.0, read against a declared
+# lineage-23.2). Worse, the same hardcoding made CI clone the RETIRED overlay and pins, so a green CI would
+# not even have meant "the active line is healthy".
+#
+# Local lint cannot see GitHub's workflow inputs, so the inputs are made impossible to diverge instead:
+# the declared line is committed to this repository as BUILD_TARGET (CI reads that, never a literal), and
+# this gate fails if that copy and the workspace's roms/BUILD_TARGET disagree. A drift here is exactly the
+# condition that produced a CI failure the local run could not reproduce.
+def c115():
+    def declared(path):
+        try:
+            for ln in open(path, encoding='utf-8', errors='replace'):
+                ln = ln.strip()
+                if ln and not ln.startswith('#'):
+                    return ln
+        except OSError:
+            return None
+        return None
+
+    ws = declared(f'{ROOT}/roms/BUILD_TARGET')                    # local source of truth
+    ci = declared(f'{ROOT}/roms/common/tools/BUILD_TARGET')       # the copy GitHub CI reads
+
+    if ws is None:
+        info('C115 the CI-visible declared line matches the workspace',
+             'roms/BUILD_TARGET absent or empty — nothing to compare')
+        return
+    if ci is None:
+        chk('C115 the CI-visible declared line matches the workspace', False,
+            'roms/common/tools/BUILD_TARGET is missing, so CI has no way to learn the declared line and'
+            ' must hardcode one — which is precisely how CI came to lint the retired lineage-23.2 line while'
+            ' the tree was on ' + ws + '. Commit the copy (it is a hard copy, never a symlink: the tooling'
+            ' repo is deployed by copy and symlinks do not survive that).')
+        return
+    chk('C115 the CI-visible declared line matches the workspace', ws == ci,
+        (f'the workspace declares {ws} but the copy CI reads declares {ci} — CI would lint one line while'
+         ' the tree is on another, and the failure would appear only on GitHub. Update'
+         ' roms/common/tools/BUILD_TARGET in the same change that moves the line.')
+        if ws != ci
+        else f'both declare {ws} (CI reads this copy; it cannot hardcode a stale line)')
+# Note: This code is purely AI-generated.
+# --- C116: every failed GitHub CI run must be triaged locally -----------------------------------------
+# History (2026-11-06): a red CI run was learned about from an email, on a commit whose LOCAL lint had
+# passed. C102 already enforces "a failed BUILD log must be fully triaged before anything else happens";
+# a CI failure is the same kind of evidence about the same project and was reaching nobody who could act
+# on it. This is the offline half of that control: ci/ci-status.sh records every failed run it observes in
+# logs/ci/ci-runs.json and captures the run's log, and this gate requires a triage write-up for each one.
+#
+# Offline by design: the lint must not depend on the network, so it reads the local record rather than the
+# GitHub API. If the record is absent, there is nothing to check and that is reported as INFO (not a pass
+# with teeth that do not exist).
+def c116():
+    import json as _json
+    runs_path = f'{ROOT}/logs/ci/ci-runs.json'
+    if not os.path.isfile(runs_path):
+        info('C116 failed CI runs are triaged',
+             'no logs/ci/ci-runs.json yet — ci/ci-status.sh writes it whenever it observes a run')
+        return
+    try:
+        runs = _json.load(open(runs_path, encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        chk('C116 failed CI runs are triaged', False,
+            f'logs/ci/ci-runs.json is unreadable ({e}) — it is written by tools/ci/ci-status.sh')
+        return
+    failed = [r for r in runs if r.get('conclusion') not in ('success', None)]
+    if not failed:
+        chk('C116 failed CI runs are triaged', True,
+            f'{len(runs)} recorded CI run(s), none failed')
+        return
+    untriaged = [r for r in failed if not os.path.isfile(f"{ROOT}/logs/ci/triage-{r.get('run')}.md")]
+    if untriaged:
+        chk('C116 failed CI runs are triaged', False,
+            ('failed CI run(s) with no triage write-up: '
+             + ', '.join(f"{r.get('repo')}#{r.get('run')} ({r.get('conclusion')})" for r in untriaged[:4])
+             + f' — read the captured log under {ROOT}/logs/ci/ and write'
+             ' logs/ci/triage-<run-id>.md naming the cause and the fix. A CI failure that is only'
+             ' acknowledged is a failure that will be repeated (C102 exists for the same reason on'
+             ' build logs).'))
+    else:
+        chk('C116 failed CI runs are triaged', True,
+            f'{len(failed)} failed CI run(s), all triaged')
+# Note: This code is purely AI-generated.
+# --- C117: every build-tree patch must be findable and applicable from the TREE ROOT ----------------
+# History (2026-11-06): nine of eleven patches in roms/lineage/manifests/patches/ had been generated with
+# REPO-relative paths (e.g. a/scripts/sign-file.c) while ~/sync.sh applies every patch from the TREE root.
+# From there those paths resolve to nothing, `git apply --check` failed, and the loop's message said
+# "already applied or inapplicable" - so all nine were skipped on every sync. The fixes were present only
+# because they had been hand-applied to the build tree; any resync that reset one of those projects would
+# have silently dropped it, and the next build would have failed with a defect we had already solved.
+#
+# A patch is a DELIVERY mechanism, so its correctness has to be checked where it is stored, not where it is
+# consumed. This gate checks two things that together make that failure impossible:
+#   1. every path in the patch starts with a known tree-root prefix (the convention sync.sh relies on);
+#   2. where the target tree exists locally, the patch must resolve against it - forward (not yet applied)
+#      or reverse (already applied). "Neither" means the fix it carries is missing or the paths are wrong.
+TREE_ROOTS = ('kernel/realme/sm6150/', 'build/make/', 'vendor/lineage/', 'build/soong/',
+              'hardware/ril/', 'device/realme/X2/', 'vendor/realme/X2/')
+
+
+def c117():
+    import subprocess
+    pdir = f'{ROOT}/roms/lineage/manifests/patches'
+    if not os.path.isdir(pdir):
+        info('C117 build-tree patches resolve from the tree root', 'no patches directory')
+        return
+    patches = sorted(glob.glob(f'{pdir}/*.patch'))
+    if not patches:
+        chk('C117 build-tree patches resolve from the tree root', False,
+            'the patches directory is empty — patch 0001 has been delivered this way since 2026-10-31, so a'
+            ' missing directory means the delivery mechanism has gone missing')
+        return
+
+    bad_paths, unresolved, unverifiable = [], [], []
+    for p in patches:
+        name = os.path.basename(p)
+        paths = []
+        try:
+            for ln in open(p, encoding='utf-8', errors='replace'):
+                if ln.startswith('diff --git '):
+                    parts = ln.split()
+                    if len(parts) >= 4:
+                        paths.append(parts[2][2:] if parts[2].startswith('a/') else parts[2])
+                elif ln.startswith('--- a/'):
+                    # plain unified diffs (no 'diff --git' line) are accepted too: 0001 has been one since
+                    # 2026-10-31 and applies fine. The path source is the ---/+++ pair.
+                    paths.append(ln[6:].strip())
+        except OSError:
+            continue
+        paths = [x for x in dict.fromkeys(paths) if x and x != '/dev/null']
+        if not paths:
+            bad_paths.append(f'{name}: no diff header found (is this a patch?)')
+            continue
+        for t in paths:
+            if not any(t.startswith(r) for r in TREE_ROOTS):
+                bad_paths.append(f'{name}: {t} does not start with a known tree root'
+                                 f' ({", ".join(r.rstrip("/") for r in TREE_ROOTS)})')
+        # applicability, only when the target tree is present in this checkout
+        target = next((r for r in TREE_ROOTS if paths[0].startswith(r)), None)
+        if not target:
+            continue
+        if not os.path.isdir(os.path.join(ROOT, 'roms', target.rstrip('/'))):
+            unverifiable.append(f'{name} ({target.rstrip("/")} not present locally)')
+            continue
+        repo = os.path.join(ROOT, 'roms', target.rstrip('/').split('/')[0], *target.rstrip('/').split('/')[1:])
+        fwd = subprocess.run(['git', '-C', repo, 'apply', '--check', p],
+                             capture_output=True, text=True).returncode == 0
+        rev = subprocess.run(['git', '-C', repo, 'apply', '-R', '--check', p],
+                             capture_output=True, text=True).returncode == 0
+        if not (fwd or rev):
+            unresolved.append(name)
+
+    problems = bad_paths + [f'{n}: applies neither forward nor in reverse — its fix is NOT in the tree'
+                            for n in unresolved]
+    chk('C117 build-tree patches resolve from the tree root', not problems,
+        ('; '.join(problems[:4]) + f' ({len(patches)} patch(es) checked) — a patch that resolves to nothing is'
+         ' skipped SILENTLY by the sync loop, so the fix it carries never reaches the build tree')
+        if problems
+        else (f'{len(patches)} patch(es): every path uses a tree-root prefix and resolves against its tree'
+              + (f'; {len(unverifiable)} not verifiable here: ' + ', '.join(unverifiable[:3])
+                 if unverifiable else '')))
+# Note: This code is purely AI-generated.
+# --- C118: the newest green build log must carry NO warnings at all (there is no "benign" class) -------
+# User directive 2026-11-06: "Fix all, including the 218 benign. Regardless of benign or not, all error
+# should be fixed." That is also global Rule 5 ("Zero-warning builds are the expected standard. Never
+# ignore a warning."). C114 checks the one class that makes an artifact WRONG; this gate enforces the
+# standing itself, because a warning that is waved through is how the next real defect gets skimmed past:
+# the 218 "benign" lines in build 14 were exactly what made a HARD module-signing defect easy to miss.
+#
+# Every class below was present in a real build log and was fixed at its cause:
+#   162  zip: name not matched ......... patch 0007 (-y stores symlinks)
+#    56  Failed to read <part>/build.prop / IMAGES/*.img ... patch 0008 (probe only what exists)
+#     3  Can't find META/ab_partitions.txt ............... patch 0012 (A/B-only artifact)
+#     4  depmod: could not open modules.* ................ patches 0009/0010 (+ the one line with no
+#                                                         producer in a 4.14 kernel, filtered with citation)
+#     3  sign-file only supports SHA1 .................... patch 0006
+#     3  Makefile.modinst errors ......................... patch 0006
+#     3  Build sandboxing disabled (nsjail) .............. patch 0011 (precondition, not a suppression)
+#     1  Unable to get boot image timestamp .............. device.mk requests ramdisk-build.prop
+# Anything added to ALLOWED below must be cited: a rule may be loosened only with a reason recorded next to it.
+# Each class carries the artifact that FIXES it. That lets the gate tell "not fixed" (FAIL) from
+# "fixed, waiting for the next build to prove it" (INFO) - which matters because this gate would otherwise
+# deadlock the very cycle that produces the verification build: the tools push needs a clean lint, and the
+# clean lint needs a post-fix build. The fix token is matched against the patch filenames in
+# roms/lineage/manifests/patches/ and against device-tree changes, so it is evidence, not intent.
+WARNING_CLASSES = (
+    (r'zip warning: name not matched',                       'zip could not store a symlink',            '0007'),
+    (r'WARNING\s*:\s*Failed to read',                        'a probe for an artifact that is absent',   '0008'),
+    (r"Failed to read build\.prop for partition",            'a partition without a build.prop',         '0008'),
+    (r"Can't find META/ab_partitions\.txt",                  'A/B-only metadata probed on a non-A/B device', '0012'),
+    (r'depmod: WARNING',                                     'depmod metadata missing',                  '0009'),
+    (r'only supports SHA1 signing',                          'signer cannot use the configured digest',  '0006'),
+    (r'Makefile\.modinst:\d+: .*Error\s+\d+',                'a kernel module failed to install',        '0006'),
+    (r'nsjail error',                                        'sandboxing precondition failed',           '0011'),
+    (r'Unable to get boot image timestamp',                  'boot ramdisk carries no build.prop',       'device.mk'),
+    (r'(?m)^\s*warning:',                                    'a compiler warning',                       None),
+    (r'(?m)^\s*error:',                                      'a compiler error',                         None),
+)
+# Cited allowances: a substring match makes the line acceptable, and the citation says why.
+ALLOWED = (
+    ('libthiserror', 'a shared library whose NAME contains "error" — matched by a bare keyword sweep, '
+                     'not a diagnostic (build 193023, cotWinZip: "adding: SYSTEM/lib64/libthiserror...")'),
+)
+
+
+def c118():
+    logs = sorted(glob.glob(f'{ROOT}/logs/build/*.log'), key=lambda p: os.path.getmtime(p), reverse=True)
+    green = None
+    for p in logs:
+        try:
+            text = open(p, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        if re.search(r'BUILD EXIT=0', text[-20000:]):
+            green = (p, text)
+            break
+    if not green:
+        info('C118 the newest green build log carries no warnings',
+             'no archived BUILD EXIT=0 log — nothing to judge yet')
+        return
+    path, text = green
+    shipped = ''
+    for cand in (f'{ROOT}/roms/lineage/manifests/patches', f'{ROOT}/roms/common/device/X2'):
+        if os.path.isdir(cand):
+            try:
+                shipped += ' '.join(os.listdir(cand)) + ' '
+            except OSError:
+                pass
+    hits, deferred = [], []
+    for pat, why, fixed_by in WARNING_CLASSES:
+        for m in re.finditer(pat, text):
+            line = text[text.rfind('\n', 0, m.start()) + 1:text.find('\n', m.end())]
+            if any(a in line for a, _ in ALLOWED):
+                continue
+            entry = f'{why}: {line.strip()[:110]}'
+            # a fix for this class is already shipped (patch file present / device change committed) and the
+            # only thing missing is a build to prove it -> deferral, reported, not a failure
+            if fixed_by and fixed_by in shipped:
+                deferred.append(entry)
+            else:
+                hits.append(entry)
+    uniq = sorted(set(hits))
+    if not uniq and deferred:
+        info('C118 warning classes fixed but not yet proven by a build',
+             f'{os.path.basename(path)} predates the fix set: {len(deferred)} line(s) in'
+             f' {len(set(deferred))} class(es) are addressed by shipped patches/device changes; the next'
+             ' green build must show 0')
+    chk('C118 the newest green build log carries no warnings', not uniq,
+        (f'{os.path.basename(path)} records BUILD EXIT=0 with {len(hits)} warning line(s)'
+         f' ({len(uniq)} distinct), e.g. ' + ' | '.join(uniq[:3])
+         + ' — a warning that is not fixed is a warning that trains the next reader to skim past the real'
+         ' defect (the 218 "benign" lines in build 14 hid a HARD module-signing failure). Fix the cause,'
+         ' or add the line to ALLOWED with a citation.')
+        if uniq
+        else (f'{os.path.basename(path)}: 0 warning-class lines'
+              f' ({len(ALLOWED)} cited allowance(s))'))
+# Note: This code is purely AI-generated.
+# --- C119: GitHub default branches are inputs, and they must match the declared line ------------------
+# History (2026-11-06): the local lint passed and GitHub CI failed on the same commit. One of the two
+# causes was that all four ROM repos still had `default_branch = lineage-23.2` two days after the switch to
+# lineage-24.0. CI clones the DEFAULT branch, so it materialised the retired overlay and the retired pins -
+# a green CI would not even have meant "the active line is healthy". Nobody noticed because a default
+# branch is invisible from the working tree: the local run reads the checked-out branch, never the default.
+#
+# Offline by design: the network-side facts are recorded by tools/ci/ci-status.sh into
+# logs/ci/repo-state.json (it queries the API and writes what it sees), and this gate compares the record
+# against the declared line. A stale record is reported as such rather than silently trusted.
+TOOLS_REPO_BRANCH = 'main'   # the tooling repo has always been on main, deliberately
+
+
+def c119():
+    state_path = f'{ROOT}/logs/ci/repo-state.json'
+    declared = None
+    try:
+        for ln in open(f'{ROOT}/roms/BUILD_TARGET', encoding='utf-8', errors='replace'):
+            ln = ln.strip()
+            if ln and not ln.startswith('#'):
+                declared = ln
+                break
+    except OSError:
+        pass
+    if not declared:
+        info('C119 GitHub default branches match the declared line', 'no declared build line to compare')
+        return
+    if not os.path.isfile(state_path):
+        info('C119 GitHub default branches match the declared line',
+             'logs/ci/repo-state.json absent — run tools/ci/ci-status.sh once with network access to record'
+             ' what GitHub reports (this gate checks that record offline)')
+        return
+    try:
+        st = json.load(open(state_path, encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        chk('C119 GitHub default branches match the declared line', False,
+            f'logs/ci/repo-state.json is unreadable ({e}) — it is written by tools/ci/ci-status.sh')
+        return
+    if st.get('declared_line') != declared:
+        chk('C119 GitHub default branches match the declared line', False,
+            f'the record was taken when the declared line was {st.get("declared_line")}, but the tree now'
+            f' declares {declared} — re-run tools/ci/ci-status.sh so the default branches are checked'
+            ' against the CURRENT line, not the previous one')
+        return
+    defaults = st.get('default_branch') or {}
+    wrong = []
+    for repo, br in sorted(defaults.items()):
+        want = TOOLS_REPO_BRANCH if repo == 'rmx1992-rom-tools' else declared
+        if br != want:
+            wrong.append(f'{repo} -> {br or "(none)"} (want {want})')
+    chk('C119 GitHub default branches match the declared line', not wrong,
+        ('GitHub default branch(es) off the declared line: ' + '; '.join(wrong)
+         + ' — CI and any clone-without-a-branch materialise the DEFAULT branch, so a stale default means CI'
+         ' lints (and a careless build clones) the wrong line entirely, invisibly: the working tree never'
+         ' shows it. Fix with: PATCH /repos/<owner>/<repo> {"default_branch":"' + declared + '"}')
+        if wrong
+        else (f'{len(defaults)} repo(s) checked against {declared}'
+              f' (record taken {st.get("checked", "?")})'))
 # Note: This code is purely AI-generated.
 # --- entry point ---------------------------------------------------------------------------------
 # This MUST be the last part lexicographically. The bundler concatenates parts in sorted order, so a

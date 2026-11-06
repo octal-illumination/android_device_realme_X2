@@ -87,6 +87,17 @@ BOARD_KERNEL_TAGS_OFFSET := 0x00000100
 BOARD_RAMDISK_OFFSET := 0x01000000
 TARGET_KERNEL_SOURCE := kernel/realme/sm6150
 TARGET_KERNEL_CONFIG := X2_defconfig
+# NOTE (2026-11-06, octal-illumination): supply the cross-compile prefix. This 4.14 kernel's
+# top Makefile only derives clang --target (and --prefix) when CROSS_COMPILE is non-empty
+# (Makefile: "ifneq ($(CROSS_COMPILE),) CLANG_TRIPLE ?= $(CROSS_COMPILE); CLANG_FLAGS +=
+# --target=..."). Without it, KBUILD_AFLAGS/CFLAGS carry no --target and every .S assembly
+# (vdso gettimeofday.S/note.S/sigreturn.S: .req rejected, 'svc' invalid, invalid register
+# names) is fed to the HOST assembler — while .c compiles happen to slip through. With
+# LLVM_IAS=1 the integrated assembler does the real work; the GNU prefix is only consulted
+# for --target/--prefix derivation (host aarch64-linux-gnu- binutils verified present).
+# Verified on the build host: with CROSS_COMPILE=aarch64-linux-gnu- the vdso objects assemble
+# clean; without, they fail exactly as in build 8 (x2build-20261105_233810).
+KERNEL_CROSS_COMPILE := CROSS_COMPILE=aarch64-linux-gnu-
 # NOTE (2026-11-06, octal-illumination): pin REMOVED — it was derived from a wrong conclusion
 # (the A16 log's clang-r563880c hits were not kernel-compile commands; "broken .inst" absence
 # there shows the A16 kernel used a different toolchain path). Reproduced on the host: EVERY

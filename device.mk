@@ -198,9 +198,16 @@ PRODUCT_PACKAGES += \
     android.hardware.gnss@1.1.vendor \
     android.hardware.gnss@2.1.vendor
 
+# REMOVED 2026-11-07 (dead PRODUCT_PACKAGES entries, evidence-based): libloc_net_iface and
+# liblocdiagiface are gone from the list below because the build's own module-info.json resolves
+# ZERO modules by either name, neither exists in the F.26 OEM image, and the only "provider"
+# citation we held (ci/ref/PRODUCT_PACKAGES-provider-evidence.txt) is a tree OUTSIDE our sync set -
+# "NOT-INDEXED" in the case of libloc_net_iface. They were carried on the strength of a cache entry
+# alone, which is the failure mode C63 exists for (same class as the 6 dead OMX refs, register
+# class 3). The comment sits HERE, not inside the continuation block: a comment line inside a
+# backslash continuation silently swallows the packages that follow it (register class 4 - the
+# `missing separator` defect from 2026-10-31).
 PRODUCT_PACKAGES += \
-    libloc_net_iface \
-    liblocdiagiface \
     apdr.conf \
     flp.conf \
     gnss_antenna_info.conf \

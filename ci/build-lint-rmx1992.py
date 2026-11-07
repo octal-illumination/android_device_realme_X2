@@ -5403,8 +5403,14 @@ WARNING_CLASSES = (
     (r'Makefile\.modinst:\d+: .*Error\s+\d+',                'a kernel module failed to install',        '0006'),
     (r'nsjail error',                                        'sandboxing precondition failed',           '0011'),
     (r'Unable to get boot image timestamp',                  'boot ramdisk carries no build.prop',       'device.mk'),
-    (r'(?m)^\s*warning:',                                    'a compiler warning',                       None),
+    # UPPERCASE as well as lowercase (2026-11-07): the first version matched only '^\s*warning:' and so
+    # MISSED 'WARNING: modpost: Found 4 section mismatch(es).' — a real kernel warning sat in a log this
+    # gate had already certified as clean. A gate whose pattern is narrower than the thing it certifies is
+    # the same class of defect it exists to catch.
+    (r'(?m)^\s*warning[:\s]',                                'a compiler warning',                       None),
+    (r'(?m)^\s*WARNING[:\s]',                                'a tool warning (uppercase WARNING)',       None),
     (r'(?m)^\s*error:',                                      'a compiler error',                         None),
+    (r'(?m)^\s*ERROR[:\s]',                                  'a tool error (uppercase ERROR)',           None),
 )
 # Cited allowances: a substring match makes the line acceptable, and the citation says why.
 ALLOWED = (

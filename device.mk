@@ -66,6 +66,13 @@ PRODUCT_COPY_FILES += \
 # X2-Fix (2026-10-21): dead PRODUCT_PACKAGES refs removed in prior commits: AntHalService-Soong,
 # libOmxAacEnc, libOmxAmrEnc, libOmxEvrcEnc, libOmxQcelp13Enc, libOmxG711Enc, libmm-omxcore
 # (no source in vanilla 23.2 sync set; F.26 ships only *Dec decoder blobs; official sm8150 omits them).
+# NOTE (2026-11-07, octal-illumination): libwfdhdcpservice_proprietary.so (OEM WFD HDCP HAL) has a real
+# DT_NEEDED on libclang_rt.ubsan_standalone-arm-android.so, which the OEM never shipped - so the
+# dependency could not resolve on stock either. We ship the runtime the binary was built against
+# (clang prebuilt, declared as a 32-bit vendor module in Android.bp), which makes the HAL loadable.
+PRODUCT_PACKAGES += \
+    libclang_rt.ubsan_standalone-arm-android
+
 # NOTE (2026-11-06, octal-illumination): the platform ships a ramdisk-build.prop soong module
 # (build/soong/Android.bp) that installs system/etc/ramdisk/build.prop into TARGET_RAMDISK_OUT, and
 # generic_ramdisk.mk requests it. This device does not inherit generic_ramdisk, so the module was never

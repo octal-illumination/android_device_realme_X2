@@ -2239,11 +2239,25 @@ def c60():
         return any(is_exec for _d, is_exec in dependents.get(son, set()))
 
     exec_fatal = [s for s in risk if is_exec_dep(s)]
-    dormant = sorted(missing)
+
+    # DSP-SIDE DEPENDENCIES ARE NOT HLOS-RESOLVED (2026-11-07). Everything under rfsa/adsp/ is a skeleton
+    # library loaded by the DSP through FastRPC, not by the HLOS dynamic linker, so its DT_NEEDED entries
+    # are satisfied on the DSP side. Verified for every soname this check was reporting: libgcc.so has 35
+    # dependents and ubwcdma_dynlib.so one - ALL of them under rfsa/adsp - and both sonames are absent from
+    # the ENTIRE F.26 OEM image, i.e. the reference firmware never had them on the HLOS side either. They
+    # are counted in the detail line rather than dropped silently, because losing the information would be
+    # the same defect in the opposite direction.
+    def only_dsp_skel_dependents(son):
+        deps = dependents.get(son, set())
+        return bool(deps) and all('/rfsa/adsp/' in d.replace('\\', '/') for d, _ in deps)
+
+    dsp_side = sorted(s for s in missing if only_dsp_skel_dependents(s))
+    dormant = sorted(s for s in missing if s not in set(dsp_side))
 
     detail = (f'{len(elfs)} ELF blobs, {edges} DT_NEEDED edges, {len(distinct)} distinct sonames -> '
               f'{len(by_vendor)} vendor-provided, {len(by_base)} base/OEM-provided, '
               f'{len(risk)} dropped-but-OEM-shipped, {len(dormant)} absent-from-OEM-too, '
+              f'{len(dsp_side)} DSP-side (not HLOS-resolved), '
               f'{len(exec_fatal)} exec-blocking'
               + (f'; unreadable={unreadable}' if unreadable else ''))
     chk('C60 ELF DT_NEEDED closure', not exec_fatal, detail)
@@ -2451,10 +2465,28 @@ def c63():
             n = n2
         return n
 
+    # BUILD-DERIVED (measured, 2026-11-07): the build's own module-info.json, reduced to
+    # <name>\t<class>\t<installed-count> by rebuild-caches-from-build.py. It answers the question this gate
+    # actually asks - "does a provider exist?" - from a measured artifact instead of an enumerated guess: it
+    # is how libloc_net_iface and liblocdiagiface were shown to resolve to ZERO modules (dead entries,
+    # removed) while eleven other entries that rested on a cache alone all resolve with real installed
+    # outputs. It is MEASURED, not independent (it reflects our config, not upstream truth), so it is
+    # reported as its own tier and never as 'ours' or 'fetched-source'.
+    buildprov = set()
+    try:
+        for ln in open(f'{ROOT}/roms/common/tools/ref/build-provided-packages.txt',
+                       encoding='utf-8', errors='replace'):
+            ln = ln.strip()
+            if ln and not ln.startswith('#'):
+                buildprov.add(ln.split('\t')[0])
+    except OSError:
+        pass
+
     truth = {                                  # T0/T1/T2 — may establish a verdict
         'ours': ours,
         'fetched-source': srcmods,
         'OEM-image': oem,
+        'build-provided (measured)': buildprov,
     }
     hint = {                                   # T4 — may only corroborate, never establish
         'base_module_universe.txt': uni,
@@ -2465,7 +2497,8 @@ def c63():
     }
 
     unsupported, cache_only = [], []
-    counts = {'ours': 0, 'fetched-source': 0, 'OEM-image': 0, 'cache-only': 0}
+    counts = {'ours': 0, 'fetched-source': 0, 'OEM-image': 0, 'build-provided (measured)': 0,
+              'cache-only': 0}
     for p in sorted(pkgs):
         b = strip(p)
         hit_truth = [k for k, v in truth.items() if b in v]
@@ -2574,6 +2607,19 @@ def c64():
     # C66: external DT_NEEDED sonames must be satisfiable (base corpus or cited allowlist)
     import glob as _g2
     _base_names = set()
+    # INSTALLED FILENAMES, not just module names (2026-11-07): the platform installs
+    # libprotobuf-cpp-full-3.9.1.so from a module named `...-vendorcompat`, so a name-only match called that
+    # soname unsatisfied, the sanctioned copy tool copied the F.26 blobs, and C82 caught the duplicate
+    # install. This list comes from the build's own module-info.json (provenance in the file header) and
+    # closes a blind spot no name-based check can see.
+    try:
+        for _ln in open(f'{ROOT}/roms/common/tools/ref/build-installed-sonames.txt',
+                        encoding='utf-8', errors='replace'):
+            _ln = _ln.strip()
+            if _ln and not _ln.startswith('#'):
+                _base_names.add(_ln)
+    except OSError:
+        pass
     for _fn in _g2.glob(f'{ROOT}/roms/common/tools/ref/sources/manifest/*'):
         try:
             _t = open(_fn, encoding='utf-8', errors='replace').read()
@@ -4508,9 +4554,9 @@ def c104():
         if in_lib:
             # A cited exception beats a blanket rule only when it carries evidence: the ledger below names the
             # exact source path and why no Soong type can install it. Everything else in a lib path fails.
-            if tail[1] in exceptions:
-                info('C104 ELF copy exception', f'{tail[1]} — cited in ref/elf-copy-exceptions.txt')
-            else:
+            # A cited exception is accounted for by the single C104 INFO that names the ledger and the
+            # paths (the second, per-path line was redundant); anything uncited still fails.
+            if tail[1] not in exceptions:
                 bad.append(f'line {n}: {m.group(1)} -> {dest} (library)')
         elif not broken_allowed:
             bad.append(f'line {n}: {m.group(1)} -> {dest} (set BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES for firmware)')

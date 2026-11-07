@@ -1504,3 +1504,7 @@ vendor/lib/vendor.qti.hardware.tui_comm@1.0.so|37a9af9fbdf5e3ec24129037d6f2fc163
 vendor/lib/libcamera_nn_stub.so|2ed97b0934d13df5a4adfdfcc3dc1d829785350b
 vendor/lib/libcamxfdalgov8.so|5f3914991c53cd403bb89a67aeae2c4ea63a9b3a
 odm/lib/vendor.oplus.hardware.bluetooth_audio@1.0.so|bd568d83371cde430d983c12155406636518663b
+vendor/lib/libprotobuf-cpp-full-3.9.1.so|212dc220a1c115eccb1442560eb402e0cd97c8bc
+vendor/lib64/libprotobuf-cpp-full-3.9.1.so|521fd2f75afe8adfff00cb3ce8e3c39e60fd7bee
+vendor/lib/libprotobuf-cpp-lite-3.9.1.so|ed88658c33170ce6aec118977955ab884f834a49
+vendor/lib64/libprotobuf-cpp-lite-3.9.1.so|9daa7d0c70314917c1563941baed85cfc93e9ba4

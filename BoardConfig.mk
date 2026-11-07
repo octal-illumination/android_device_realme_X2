@@ -252,12 +252,13 @@ WPA_SUPPLICANT_VERSION := VER_0_8_X
 # Inherit from the proprietary version
 include vendor/realme/X2/BoardConfigVendor.mk
 
-# ELF files in PRODUCT_COPY_FILES (2026-10-31). The platform rejects them unconditionally
-# (build/make/core/Makefile, check-elf-prebuilt-product-copy-files) and offers exactly one escape, which we use
-# ONLY for firmware: the 15 affected files are DSP/modem/camera/fingerprint firmware images
-# (ipa_fws.elf, a6xx_zap.*, dpAP_*, CAMERA_ICP.elf, goodixfp.*). They are ELF containers, not linkable code, and
-# they have no Soong module type for their install paths (/firmware at the root).
-# The escape is NOT a licence to ship libraries this way: libdav1d.so.4 was converted to a real
-# cc_prebuilt_library_shared module (libdav1d_odm) instead, and lint gate C104 fails on any ELF copy whose
-# destination is a LIBRARY path, flag or no flag.
+# NOTE (2026-11-07, octal-illumination): CORRECTED - the previous text here claimed libdav1d.so.4 had
+# been "converted to a real cc_prebuilt_library_shared module (libdav1d_odm)". That conversion was
+# ATTEMPTED AND REVERTED (vendor commit "X2: revert libdav1d_odm - filename_from_src is not a cc property;
+# keep the cited copy instead"): soong's cc_prebuilt_library_shared installs "<stem>.so" and has no
+# filename_from_src, so it cannot produce the versioned name libdav1d.so.4 that the shipped OEM
+# libavcodec.so declares in DT_NEEDED. The PRODUCT_COPY_FILES entry in vendor/realme/X2-vendor.mk is
+# therefore still the mechanism, and it stays permitted ONLY because it is cited with evidence in
+# roms/common/tools/ref/elf-copy-exceptions.txt (gate C104). Still open, as that citation records: replace
+# the OEM libavcodec, or add a versioned-lib module type to soong.
 BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true

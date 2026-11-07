@@ -19,3 +19,28 @@ install_symlink {
     installed_location: "firmware/wlan/qca_cld/WCNSS_qcom_cfg.ini",
     symlink_target: "/vendor/etc/wifi/WCNSS_qcom_cfg.ini",
 }
+
+// NOTE (2026-11-07, octal-illumination): vendor/lib/libwfdhdcpservice_proprietary.so carries a real
+// DT_NEEDED on libclang_rt.ubsan_standalone-arm-android.so (verified with readelf -d). The OEM built that
+// HAL with UBSan and shipped it WITHOUT the runtime, so the dependency could not resolve on stock F.26
+// either - gate C60 reports it as inherited, not as a regression we introduce. Supplying the runtime the
+// binary was built against makes the HAL loadable again; the alternative (patching the OEM binary with
+// patchelf --remove-needed) would destroy the blob's hash provenance, and the file is a clang prebuilt
+// rather than an OEM blob, so it can be shipped without touching proprietary-files.txt.
+cc_prebuilt_library_shared {
+    name: "libclang_rt.ubsan_standalone-arm-android",
+    owner: "octal-illumination",
+    vendor: true,
+    relative_install_path: "lib",
+    compile_multilib: "32",
+    strip: {
+        none: true,
+    },
+    target: {
+        android_arm: {
+            srcs: [
+                "prebuilt/libclang_rt.ubsan_standalone-arm-android.so",
+            ],
+        },
+    },
+}

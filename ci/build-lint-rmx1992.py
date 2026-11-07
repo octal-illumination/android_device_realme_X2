@@ -2176,6 +2176,20 @@ def c60():
     # this device, so absence from /system/lib{,64} alone does NOT mean absent from the device.
     apex_libs = refset('oem_apex_libraries.txt')
     base_sonames = refset('base_system_libraries.txt') | C60_CORE_SONAMES | oem_libs | apex_libs
+    # INSTALLED FILENAMES from the build itself (2026-11-07). The evidence above is the OEM image plus
+    # curated caches, and it was incomplete in a way that cost a build: libwfdhdcpservice_proprietary.so
+    # needs libclang_rt.ubsan_standalone-arm-android.so, absent from F.26 but INSTALLED by our platform
+    # through the VNDK APEXes (apex/com.android.vndk.v31|v32/lib/), so the dependency was satisfiable all
+    # along and the module added to "fix" it collided with the base's own prebuilt. Provenance is in the
+    # file header (measured from out/target/product/X2/module-info.json, sha256 recorded there).
+    try:
+        for _ln in open(f'{ROOT}/roms/common/tools/ref/build-installed-sonames.txt',
+                        encoding='utf-8', errors='replace'):
+            _ln = _ln.strip()
+            if _ln and not _ln.startswith('#'):
+                base_sonames.add(_ln)
+    except OSError:
+        pass
     base_ifaces = refset('base_interface_modules.txt')
     base_sonames |= {n + '.so' for n in base_ifaces} | base_ifaces
     base_modules = (refset('base_module_universe.txt') | refset('base_provided_packages.txt')

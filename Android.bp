@@ -31,8 +31,16 @@ cc_prebuilt_library_shared {
     name: "libclang_rt.ubsan_standalone-arm-android",
     owner: "octal-illumination",
     vendor: true,
-    relative_install_path: "lib",
+    // NOTE: `relative_install_path: "lib"` was WRONG here - `vendor: true` already installs into
+    // vendor/lib, so the property produced vendor/lib/lib/ (the build log's symbols_map path showed it).
     compile_multilib: "32",
+    // The runtime's own DT_NEEDED, as the platform's check_elf_file demanded (it names the fix itself):
+    //   error: DT_NEEDED "liblog.so" is not specified in shared_libs.
+    shared_libs: [
+        "libc",
+        "libdl",
+        "liblog",
+    ],
     strip: {
         none: true,
     },

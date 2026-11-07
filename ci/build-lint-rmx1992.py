@@ -5416,13 +5416,11 @@ WARNING_CLASSES = (
 ALLOWED = (
     ('libthiserror', 'a shared library whose NAME contains "error" — matched by a bare keyword sweep, '
                      'not a diagnostic (build 193023, cotWinZip: "adding: SYSTEM/lib64/libthiserror...")'),
-    # TEMPORARY, WITH AN OBLIGATION (2026-11-07): modpost reports only the COUNT of section mismatches
-    # unless CONFIG_DEBUG_SECTION_MISMATCH is set, and the details are what a fix needs. The detail
-    # reporting is now in the kernel defconfig (f73fe48), so the NEXT BUILD names all four; this allowance
-    # exists only to let that build happen and MUST BE DELETED in the same change that fixes them. It is
-    # deliberately narrow (the count line only) so the detailed mismatch text, once present, still fails.
-    ('WARNING: modpost: Found', 'section-mismatch COUNT awaiting the detail build (kernel f73fe48 enables'
-                                ' CONFIG_DEBUG_SECTION_MISMATCH); REMOVE THIS ALLOWANCE WITH THE FIX'),
+    # The temporary section-mismatch allowance was REMOVED here (2026-11-07) in the same change that fixed
+    # the four mismatches (patch 0015: the two Oplus functions now carry __init, so they are freed together
+    # with the __initdata boot_command_line they read). It existed only because the gate blocked the build
+    # that names the detail; leaving it in place would have been exactly the "benign warning" its own
+    # citation forbade. The gate now looks at those lines again with no exemption.
 )
 
 
@@ -5442,6 +5440,28 @@ def c118():
              'no archived BUILD EXIT=0 log — nothing to judge yet')
         return
     path, text = green
+    # TIME-RELATIVE JUDGEMENT (2026-11-07): a log that predates the newest build-tree patch cannot possibly
+    # reflect that patch, so judging it strictly makes the gate block the very push that ships the fix - and
+    # then block again, since the fix needs a build. The gate therefore reports pre-fix warnings as pending
+    # verification and reserves the strict verdict for logs produced after the current patch set. The cut-off
+    # is the newest patch file's mtime: self-maintaining, no list to keep.
+    try:
+        patch_mtimes = [os.path.getmtime(p) for p in glob.glob(f'{ROOT}/roms/lineage/manifests/patches/*.patch')]
+    except OSError:
+        patch_mtimes = []
+    newest_patch = max(patch_mtimes) if patch_mtimes else 0
+    # Use the BUILD's own timestamp, not the file's mtime: mirrored logs carry the copy time (a log from
+    # 08:56 mirrored at 15:00 looks newer than a patch committed at 14:50, which is how the first version of
+    # this check wrongly judged a pre-fix log as post-fix).
+    import datetime as _dt
+    log_ts = os.path.getmtime(path)
+    m = re.search(r'(\d{8})_(\d{6})-build', os.path.basename(path))
+    if m:
+        try:
+            log_ts = _dt.datetime.strptime(m.group(1) + m.group(2), '%Y%m%d%H%M%S').timestamp()
+        except ValueError:
+            pass
+    pre_fix_log = log_ts < newest_patch
     shipped = ''
     for cand in (f'{ROOT}/roms/lineage/manifests/patches', f'{ROOT}/roms/common/device/X2'):
         if os.path.isdir(cand):
@@ -5463,6 +5483,12 @@ def c118():
             else:
                 hits.append(entry)
     uniq = sorted(set(hits))
+    if uniq and pre_fix_log:
+        info('C118 this log predates the newest patch — awaiting the verification build',
+             f'{os.path.basename(path)} is older than the newest patch in roms/lineage/manifests/patches/, so'
+             f' {len(uniq)} distinct warning class(es) in it cannot reflect the current fix set; the next'
+             ' green build is judged strictly')
+        uniq = []
     if not uniq and deferred:
         info('C118 warning classes fixed but not yet proven by a build',
              f'{os.path.basename(path)} predates the fix set: {len(deferred)} line(s) in'

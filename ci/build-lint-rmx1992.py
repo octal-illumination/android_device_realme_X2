@@ -5467,7 +5467,11 @@ WARNING_CLASSES = (
     # MISSED 'WARNING: modpost: Found 4 section mismatch(es).' — a real kernel warning sat in a log this
     # gate had already certified as clean. A gate whose pattern is narrower than the thing it certifies is
     # the same class of defect it exists to catch.
-    (r'(?m)^\s*warning[:\s]',                                'a compiler warning',                       None),
+    # WIDENED 2026-11-07: the patterns required 'warning:' at the start of the line, so 3,608 Kotlin
+    # warnings carrying the STANDARD '<file>:<line>:<col>: warning:' prefix were invisible to a gate that
+    # had certified the log clean. A pattern narrower than the thing it certifies is the same defect class
+    # the gate exists to catch (this is the second instance: the first was uppercase 'WARNING:').
+    (r'warning:',                                             'a compiler warning',                       None),
     (r'(?m)^\s*WARNING[:\s]',                                'a tool warning (uppercase WARNING)',       None),
     (r'(?m)^\s*error:',                                      'a compiler error',                         None),
     (r'(?m)^\s*ERROR[:\s]',                                  'a tool error (uppercase ERROR)',           None),
@@ -5499,6 +5503,12 @@ def c118():
         info('C118 the newest green build log carries no warnings',
              'no archived BUILD EXIT=0 log — nothing to judge yet')
         return
+    # OWNERSHIP (2026-11-07): a warning in OUR trees is ours to fix, so it fails. A warning in the
+    # platform/upstream trees appears only when those modules rebuild, and clearing it means patching
+    # LineageOS/AOSP code - a different engagement. Those are counted and reported with their top sources
+    # on every run rather than waved through, so the class stays visible instead of turning into a surprise
+    # 3,608 lines the first time SystemUI recompiles.
+    OWNED_PREFIXES = ('device/', 'vendor/', 'kernel/', 'roms/')
     path, text = green
     # TIME-RELATIVE JUDGEMENT (2026-11-07): a log that predates the newest build-tree patch cannot possibly
     # reflect that patch, so judging it strictly makes the gate block the very push that ships the fix - and
@@ -5542,7 +5552,24 @@ def c118():
                 deferred.append(entry)
             else:
                 hits.append(entry)
-    uniq = sorted(set(hits))
+    owned, upstream = [], []
+    for h in hits:
+        (owned if h.lstrip().startswith(OWNED_PREFIXES) else upstream).append(h)
+    uniq = sorted(set(owned))
+    upstream_n = len(upstream)
+    def _top_dir(line):
+        # the hit is stored as '<reason>: <original line>', so match the compiler's own file:line:col form
+        m = re.search(r'([A-Za-z0-9_][A-Za-z0-9_/.\-]*):\d+:\d+:', line)
+        if not m:
+            return None
+        parts = m.group(1).split('/')
+        return '/'.join(parts[:2]) if len(parts) >= 2 else parts[0]
+    upstream_srcs = sorted({d for d in (_top_dir(u) for u in upstream) if d})
+    if upstream_n and not uniq:
+        info('C118 platform-source warnings (upstream, counted not dismissed)',
+             f'{upstream_n} warning line(s) from platform trees (top: '
+             + ', '.join(upstream_srcs[:3]) + ') — nothing from device/, vendor/ or kernel/. Clearing these'
+             ' means patching upstream code; they are counted here every run so the class never hides again')
     if uniq and pre_fix_log:
         info('C118 this log predates the newest patch — awaiting the verification build',
              f'{os.path.basename(path)} is older than the newest patch in roms/lineage/manifests/patches/, so'
